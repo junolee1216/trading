@@ -556,6 +556,11 @@ dd {
   height: calc(100% - 34px);
 }
 
+.tradingview-widget-container {
+  width: 100%;
+  height: calc(100% - 34px);
+}
+
 .tradingview-loading {
   display: grid;
   min-height: 486px;

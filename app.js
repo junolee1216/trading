@@ -24,22 +24,7 @@ const getStock = () => data.stocks.find((stock) => stock.code === state.selected
 const getStockEntry = (code) => stockUniverse.find((stock) => stock.code === code) || data.stocks.find((stock) => stock.code === code);
 const compactText = (value = "") => String(value).toLowerCase().replace(/\s+/g, "");
 const tradingViewSymbol = (code) => `KRX:${String(code).padStart(6, "0")}`;
-let tradingViewLoadPromise;
 let tradingViewRenderId = 0;
-
-function loadTradingViewScript() {
-  if (window.TradingView) return Promise.resolve();
-  if (tradingViewLoadPromise) return tradingViewLoadPromise;
-  tradingViewLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/tv.js";
-    script.async = true;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-  return tradingViewLoadPromise;
-}
 
 function renderTradingViewChart(entry) {
   const container = $("tradingview-chart");
@@ -48,34 +33,30 @@ function renderTradingViewChart(entry) {
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
   const widgetContainerId = `tradingview-widget-${renderId}`;
-  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div class="tradingview-loading">Loading TradingView chart...</div>`;
+  const config = {
+    autosize: true,
+    symbol,
+    interval: "D",
+    timezone: "Asia/Seoul",
+    theme: "light",
+    style: "1",
+    locale: "kr",
+    allow_symbol_change: true,
+    calendar: false,
+    support_host: "https://www.tradingview.com"
+  };
 
-  loadTradingViewScript()
-    .then(() => {
-      if (renderId !== tradingViewRenderId || !window.TradingView) return;
-      container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div id="${widgetContainerId}" class="tradingview-widget-target"></div>`;
-      new window.TradingView.widget({
-        autosize: true,
-        symbol,
-        interval: "D",
-        timezone: "Asia/Seoul",
-        theme: "light",
-        style: "1",
-        locale: "kr",
-        toolbar_bg: "#f4f7fb",
-        enable_publishing: false,
-        allow_symbol_change: true,
-        hide_side_toolbar: false,
-        withdateranges: true,
-        details: true,
-        hotlist: false,
-        calendar: false,
-        container_id: widgetContainerId
-      });
-    })
-    .catch(() => {
+  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div class="tradingview-widget-container"><div id="${widgetContainerId}" class="tradingview-widget-target"></div></div>`;
+  const script = document.createElement("script");
+  script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+  script.async = true;
+  script.textContent = JSON.stringify(config);
+  script.onerror = () => {
+    if (renderId === tradingViewRenderId) {
       container.innerHTML = "<div class=\"tradingview-loading\">TradingView chart could not be loaded. Please check the network connection.</div>";
-    });
+    }
+  };
+  container.querySelector(".tradingview-widget-container").appendChild(script);
 }
 
 function searchPriority(stock, normalizedKeyword) {
