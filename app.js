@@ -23,6 +23,58 @@ const percentClass = (value) => (value > 0 ? "positive" : value < 0 ? "negative"
 const getStock = () => data.stocks.find((stock) => stock.code === state.selectedCode) || data.stocks[0];
 const getStockEntry = (code) => stockUniverse.find((stock) => stock.code === code) || data.stocks.find((stock) => stock.code === code);
 const compactText = (value = "") => String(value).toLowerCase().replace(/\s+/g, "");
+const tradingViewSymbol = (code) => `KRX:${String(code).padStart(6, "0")}`;
+let tradingViewLoadPromise;
+let tradingViewRenderId = 0;
+
+function loadTradingViewScript() {
+  if (window.TradingView) return Promise.resolve();
+  if (tradingViewLoadPromise) return tradingViewLoadPromise;
+  tradingViewLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/tv.js";
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return tradingViewLoadPromise;
+}
+
+function renderTradingViewChart(entry) {
+  const container = $("tradingview-chart");
+  if (!container || !entry?.code) return;
+  const renderId = tradingViewRenderId + 1;
+  tradingViewRenderId = renderId;
+  container.innerHTML = `<div class="tradingview-loading">Loading TradingView chart for ${entry.name || entry.code}...</div>`;
+
+  loadTradingViewScript()
+    .then(() => {
+      if (renderId !== tradingViewRenderId || !window.TradingView) return;
+      container.innerHTML = "";
+      new window.TradingView.widget({
+        autosize: true,
+        symbol: tradingViewSymbol(entry.code),
+        interval: "D",
+        timezone: "Asia/Seoul",
+        theme: "light",
+        style: "1",
+        locale: "kr",
+        toolbar_bg: "#f4f7fb",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        hide_side_toolbar: false,
+        withdateranges: true,
+        details: true,
+        hotlist: false,
+        calendar: false,
+        container_id: "tradingview-chart"
+      });
+    })
+    .catch(() => {
+      container.innerHTML = "<div class=\"tradingview-loading\">TradingView chart could not be loaded. Please check the network connection.</div>";
+    });
+}
 
 function searchPriority(stock, normalizedKeyword) {
   const name = compactText(stock.name);
@@ -458,6 +510,7 @@ function renderUnavailable(entry) {
     "수급과 뉴스 데이터가 없어 단기 리스크를 별도로 확인해야 합니다."
   ].map((risk) => `<li>${risk}</li>`).join("");
   $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>전략 데이터 연결 필요</span></div>`).join("");
+  renderTradingViewChart(entry);
   drawUnavailableChart(entry);
   requestAnimationFrame(layoutAnalysisMasonry);
 
@@ -483,6 +536,7 @@ function render() {
   renderSummary(stock, analysis);
   renderAnalysis(stock, analysis);
   renderWatchlist();
+  renderTradingViewChart(stock);
   drawChart(stock, analysis);
   setupCollapsiblePanels();
   requestAnimationFrame(layoutAnalysisMasonry);

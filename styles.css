@@ -524,12 +524,37 @@ dd {
 
 .chart-panel {
   margin-bottom: 16px;
-  min-height: 520px;
+  min-height: 940px;
 }
 
 .analysis-masonry {
   position: relative;
   width: 100%;
+}
+
+.tradingview-chart {
+  width: 100%;
+  height: 520px;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tradingview-loading {
+  display: grid;
+  min-height: 520px;
+  place-items: center;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.chart-source-note {
+  margin: 12px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 canvas {
