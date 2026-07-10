@@ -34,26 +34,34 @@ function renderTradingViewChart(entry) {
   const renderId = tradingViewRenderId + 1;
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
-  const params = new URLSearchParams({
-    frameElementId: `tradingview-frame-${renderId}`,
+  const widgetId = `tradingview-widget-${renderId}`;
+  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div id="${widgetId}" class="tradingview-widget-slot"></div>`;
+
+  const widgetSlot = document.getElementById(widgetId);
+  if (!widgetSlot) return;
+
+  const widgetScript = document.createElement("script");
+  widgetScript.type = "text/javascript";
+  widgetScript.async = true;
+  widgetScript.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+  widgetScript.text = JSON.stringify({
+    autosize: true,
     symbol,
     interval: "D",
-    hidesidetoolbar: "0",
-    symboledit: "1",
-    saveimage: "1",
-    toolbarbg: "f4f7fb",
-    studies: "[]",
+    timezone: "Asia/Seoul",
     theme: "light",
     style: "1",
-    timezone: "Asia/Seoul",
-    withdateranges: "1",
-    hideideas: "1",
     locale: "kr",
-    calendar: "0"
+    allow_symbol_change: true,
+    calendar: false,
+    support_host: "https://www.tradingview.com",
+    details: true,
+    hotlist: false,
+    withdateranges: true,
+    hide_side_toolbar: false,
+    save_image: true
   });
-  const iframeSrc = `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-
-  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><iframe id="tradingview-frame-${renderId}" class="tradingview-iframe" title="${entry.name || entry.code} TradingView chart" src="${iframeSrc}" allowtransparency="true" scrolling="no"></iframe>`;
+  widgetSlot.appendChild(widgetScript);
 }
 
 function searchPriority(stock, normalizedKeyword) {
