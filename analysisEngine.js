@@ -250,11 +250,22 @@ window.AnalysisEngine = (() => {
       Object.entries(profile.weights).map(([key, weight]) => [key, (sections[key].raw / sections[key].max) * weight])
     );
     let total = Object.values(weighted).reduce((sum, score) => sum + score, 0);
+    const dataLimited = sections.flow.unavailable && sections.news.unavailable;
+    if (dataLimited) {
+      const technicalRatio = sections.technical.raw / sections.technical.max;
+      const fundamentalRatio = sections.fundamental.raw / sections.fundamental.max;
+      const technicalTilt = (technicalRatio - 0.55) * 42;
+      const fundamentalTilt = (fundamentalRatio - 0.52) * 14;
+      const priceMomentumTilt = stock.changeRate > 2 ? 3 : stock.changeRate < -2 ? -3 : 0;
+      total += technicalTilt + fundamentalTilt + priceMomentumTilt;
+    }
     if (sections.market.raw / sections.market.max < 0.45 && total >= 70) total -= 5;
     total = clamp(total, 0, 100);
 
-    const signal = total >= 70 ? "매수 고려" : total >= 40 ? "보유/관망" : "매도 고려";
-    const tone = total >= 70 ? "buy" : total >= 40 ? "hold" : "sell";
+    const buyThreshold = dataLimited ? 66 : 70;
+    const sellThreshold = dataLimited ? 48 : 40;
+    const signal = total >= buyThreshold ? "매수 고려" : total >= sellThreshold ? "보유/관망" : "매도 고려";
+    const tone = total >= buyThreshold ? "buy" : total >= sellThreshold ? "hold" : "sell";
     const conf = confidence(stock, sections, total);
 
     const reasons = [
