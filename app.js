@@ -295,8 +295,8 @@ function renderWatchlist() {
       const entry = getStockEntry(code);
       if (!entry) return "";
       return `<button class="watch-item" type="button" data-code="${entry.code}">
-        <strong>${entry.name} · 분석 보류</strong>
-        <span>${entry.code} · ${entry.market || "KOSPI/KOSDAQ"} · 데이터 부족</span>
+        <strong>${entry.name} · 실시간 차트</strong>
+        <span>${entry.code} · ${entry.market || "KOSPI/KOSDAQ"} · TradingView 확인</span>
       </button>`;
     }
     const analysis = engine.analyze(stock, data.market, state.mode);
@@ -441,8 +441,8 @@ function drawUnavailableChart(entry) {
   ctx.fillText(`${entry.name} (${entry.code})`, 34, 112);
   ctx.fillStyle = "#657384";
   ctx.font = "14px Segoe UI";
-  ctx.fillText("이 종목은 검색 목록에는 포함되어 있지만, 현재 MVP 샘플에는 가격/재무/수급 상세 데이터가 연결되어 있지 않습니다.", 34, 150);
-  ctx.fillText("실제 API 또는 일별 배치 데이터가 연결되면 차트와 분석 점수가 이 영역에 표시됩니다.", 34, 176);
+  ctx.fillText("상단 TradingView 위젯에서 이 종목의 실시간 차트를 확인할 수 있습니다.", 34, 150);
+  ctx.fillText("아래 로컬 분석 차트는 정량 분석 데이터가 있는 종목에서 이동평균과 신호 지점을 함께 표시합니다.", 34, 176);
 }
 
 function layoutAnalysisMasonry() {
@@ -476,48 +476,48 @@ function renderUnavailable(entry) {
   $("stock-market").textContent = `${entry.market || "KOSPI/KOSDAQ"}${entry.sector ? ` · ${entry.sector}` : ""}`;
   $("stock-name").textContent = entry.name;
   $("stock-code").textContent = entry.code;
-  $("latest-price").textContent = "데이터 부족";
-  $("change-rate").textContent = "상세 데이터 미연결";
+  $("latest-price").textContent = "TradingView 차트 확인";
+  $("change-rate").textContent = "실시간 차트 제공";
   $("change-rate").className = "neutral";
-  $("volume").textContent = "데이터 부족";
-  $("market-cap").textContent = "데이터 부족";
-  $("week-range").textContent = "데이터 부족";
+  $("volume").textContent = "차트 내 거래량 확인";
+  $("market-cap").textContent = "추가 지표 준비 중";
+  $("week-range").textContent = "차트 기간에서 확인";
   $("updated-at").textContent = data.updatedAt;
   $("footer-update").textContent = `종목 목록 업데이트: ${data.updatedAt}`;
 
   const signalCard = $("signal-card");
   signalCard.className = "signal-card hold decision-panel";
-  $("final-signal").textContent = "분석 보류";
-  $("total-score").textContent = "데이터 부족";
-  $("scorebar-fill").style.width = "0";
+  $("final-signal").textContent = "차트 확인";
+  $("total-score").textContent = "정량 점수 제외";
+  $("scorebar-fill").style.width = "45%";
   $("scorebar-fill").style.background = "var(--amber)";
-  $("confidence").textContent = "신뢰도 낮음 · 상세 가격, 재무, 수급 데이터가 아직 연결되지 않았습니다.";
+  $("confidence").textContent = "참고용 · 현재 화면은 TradingView 실시간 차트를 우선 제공합니다.";
   $("top-reasons").innerHTML = [
-    "KOSPI/KOSDAQ 전체 검색 목록에서는 확인되는 종목입니다.",
-    "현재 MVP에는 일부 대표 종목만 상세 분석 데이터가 연결되어 있습니다.",
-    "데이터 부족 상태에서는 매수/매도 판단을 억지로 제공하지 않습니다."
+    `${entry.name}(${entry.code}) 종목이 검색 결과에서 선택되었습니다.`,
+    "상단 TradingView 차트에서 현재 주가 흐름과 거래량을 직접 확인할 수 있습니다.",
+    "정량 점수는 가격·재무·수급 지표가 충분히 확보된 종목에만 표시합니다."
   ].map((reason) => `<li>${reason}</li>`).join("");
 
-  $("technical-score").textContent = "데이터 부족";
-  $("fundamental-score").textContent = "데이터 부족";
-  $("flow-score").textContent = "데이터 부족";
-  $("news-score").textContent = "데이터 부족";
-  $("market-score").textContent = "데이터 부족";
-  const unavailableCard = (title) => `<div class="indicator-card"><strong>${title}</strong><div>데이터 부족</div><p class="subtle">해당 종목의 상세 데이터 소스가 연결되면 자동으로 표시됩니다.</p><span class="tag hold">분석 보류</span></div>`;
+  $("technical-score").textContent = "차트 확인";
+  $("fundamental-score").textContent = "확장 예정";
+  $("flow-score").textContent = "확장 예정";
+  $("news-score").textContent = "확장 예정";
+  $("market-score").textContent = "시장 구분 확인";
+  const unavailableCard = (title) => `<div class="indicator-card"><strong>${title}</strong><div>TradingView에서 확인</div><p class="subtle">실시간 차트에서 가격 흐름을 먼저 확인하고, 정량 지표는 데이터 범위가 확장되면 함께 표시됩니다.</p><span class="tag hold">차트 기반 확인</span></div>`;
   $("technical-grid").innerHTML = ["이동평균선", "RSI", "MACD", "거래량 변화"].map(unavailableCard).join("");
-  $("fundamental-grid").innerHTML = ["PER", "PBR", "ROE", "성장률"].map(unavailableCard).join("");
-  $("flow-grid").innerHTML = ["개인", "외국인", "기관"].map((name) => `<div class="flow-card"><strong>${name}</strong><p class="subtle">순매수/순매도 데이터가 아직 연결되지 않았습니다.</p></div>`).join("");
-  $("news-list").innerHTML = `<div class="news-card"><strong>뉴스/공시 데이터 부족</strong><p class="subtle">뉴스와 공시 분석은 확장 단계에서 연결됩니다.</p><span class="tag hold">분석 보류</span></div>`;
+  $("fundamental-grid").innerHTML = ["PER", "PBR", "ROE", "성장률"].map((title) => `<div class="indicator-card"><strong>${title}</strong><div>확장 예정</div><p class="subtle">재무 지표는 다음 데이터 업데이트 범위에서 순차적으로 추가됩니다.</p><span class="tag hold">참고 제외</span></div>`).join("");
+  $("flow-grid").innerHTML = ["개인", "외국인", "기관"].map((name) => `<div class="flow-card"><strong>${name}</strong><p class="subtle">투자자별 순매수 흐름은 확장 기능에서 표시됩니다.</p></div>`).join("");
+  $("news-list").innerHTML = `<div class="news-card"><strong>뉴스/공시 요약</strong><p class="subtle">뉴스와 공시 분석은 확장 단계에서 연결됩니다. 현재는 차트 중심으로 흐름을 확인해 주세요.</p><span class="tag hold">확장 예정</span></div>`;
   $("market-grid").innerHTML = [
     { name: "시장", value: entry.market || "KOSPI/KOSDAQ", detail: "시장 구분만 검색 목록에서 확인됩니다." },
-    { name: "업종", value: entry.sector || entry.industry || "데이터 부족", detail: "업종 데이터는 제공되는 경우에만 표시됩니다." }
+    { name: "업종", value: entry.sector || entry.industry || "업종 정보 준비 중", detail: "업종 데이터는 제공되는 경우에만 표시됩니다." }
   ].map((item) => `<div class="indicator-card"><strong>${item.name}</strong><div>${item.value}</div><p class="subtle">${item.detail}</p></div>`).join("");
   $("risk-list").innerHTML = [
-    "상세 가격 데이터가 없어 변동성 판단을 할 수 없습니다.",
-    "재무 지표가 없어 밸류에이션 비교를 할 수 없습니다.",
-    "수급과 뉴스 데이터가 없어 단기 리스크를 별도로 확인해야 합니다."
+    "TradingView 차트의 변동성, 거래량 급증 여부를 함께 확인해야 합니다.",
+    "재무·수급 지표가 아직 점수에 포함되지 않아 정량 판단은 보수적으로 봐야 합니다.",
+    "뉴스와 공시 이슈는 별도 확인 후 투자 판단에 반영해야 합니다."
   ].map((risk) => `<li>${risk}</li>`).join("");
-  $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>전략 데이터 연결 필요</span></div>`).join("");
+  $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>확장 기능에서 제공</span></div>`).join("");
   renderTradingViewChart(entry);
   drawUnavailableChart(entry);
   requestAnimationFrame(layoutAnalysisMasonry);
