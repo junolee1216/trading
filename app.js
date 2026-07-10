@@ -24,6 +24,8 @@ const getStock = () => data.stocks.find((stock) => stock.code === state.selected
 const getStockEntry = (code) => stockUniverse.find((stock) => stock.code === code) || data.stocks.find((stock) => stock.code === code);
 const compactText = (value = "") => String(value).toLowerCase().replace(/\s+/g, "");
 const tradingViewSymbol = (code) => `KRX:${String(code).padStart(6, "0")}`;
+const dynamicStockCache = new Map();
+const dynamicStockRequests = new Map();
 let tradingViewRenderId = 0;
 
 function renderTradingViewChart(entry) {
@@ -99,6 +101,112 @@ function getSearchMatches(query = "") {
   });
 }
 
+function yahooSymbol(entry) {
+  return `${String(entry.code).padStart(6, "0")}.${entry.market === "KOSDAQ" ? "KQ" : "KS"}`;
+}
+
+function emptyFundamentals() {
+  return {
+    per: null,
+    pbr: null,
+    roe: null,
+    revenueGrowth: null,
+    opGrowth: null,
+    netGrowth: null,
+    debtRatio: null,
+    opMargin: null,
+    dividendYield: null,
+    foreignRatio: null
+  };
+}
+
+function buildDynamicStock(entry, chartResult) {
+  const meta = chartResult.meta || {};
+  const quote = chartResult.indicators?.quote?.[0] || {};
+  const closeValues = quote.close || [];
+  const volumeValues = quote.volume || [];
+  const highValues = quote.high || [];
+  const lowValues = quote.low || [];
+  const closes = closeValues.filter((value) => Number.isFinite(value)).slice(-60).map((value) => Math.round(value));
+  const volumes = volumeValues.filter((value) => Number.isFinite(value)).slice(-60).map((value) => Math.round(value));
+  if (closes.length < 20) throw new Error("Not enough chart data");
+
+  const price = Math.round(Number.isFinite(meta.regularMarketPrice) ? meta.regularMarketPrice : closes[closes.length - 1]);
+  const previousClose = Number.isFinite(meta.chartPreviousClose) ? meta.chartPreviousClose : closes[closes.length - 2] || price;
+  const changeRate = previousClose ? Number(((price - previousClose) / previousClose * 100).toFixed(2)) : 0;
+  const highs = highValues.filter((value) => Number.isFinite(value));
+  const lows = lowValues.filter((value) => Number.isFinite(value));
+  const weekHigh = Math.round(Math.max(...highs.slice(-252), price));
+  const weekLow = Math.round(Math.min(...lows.slice(-252), price));
+  const lastVolume = volumes[volumes.length - 1] || 0;
+  const avgVolume20 = Math.round(volumes.slice(-20).reduce((sum, value) => sum + value, 0) / Math.min(20, volumes.length));
+  const updatedTime = meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000) : new Date();
+
+  return {
+    code: entry.code,
+    name: entry.name,
+    market: entry.market || (meta.exchangeName === "KOE" ? "KOSDAQ" : "KOSPI"),
+    sector: entry.sector || entry.industry || "업종 정보 준비 중",
+    price,
+    changeRate,
+    volume: lastVolume,
+    avgVolume20,
+    marketCap: "동적 조회",
+    weekHigh,
+    weekLow,
+    updatedAt: `${updatedTime.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} Yahoo Finance 기준`,
+    fundamentals: emptyFundamentals(),
+    sectorAverage: emptyFundamentals(),
+    flows: {
+      available: false,
+      individual: { d1: 0, d5: 0, d20: 0 },
+      foreign: { d1: 0, d5: 0, d20: 0 },
+      institution: { d1: 0, d5: 0, d20: 0 }
+    },
+    news: [],
+    disclosures: [],
+    backtest: {
+      period: "확장 기능에서 제공",
+      buyRule: "전략 조건 설정 필요",
+      sellRule: "전략 조건 설정 필요",
+      returnRate: null,
+      mdd: null,
+      winRate: null,
+      holdingDays: null,
+      excessReturn: null
+    },
+    prices: closes,
+    volumes
+  };
+}
+
+function fetchDynamicStock(entry) {
+  if (dynamicStockCache.has(entry.code)) return Promise.resolve(dynamicStockCache.get(entry.code));
+  if (dynamicStockRequests.has(entry.code)) return dynamicStockRequests.get(entry.code);
+
+  const symbol = yahooSymbol(entry);
+  const proxyUrl = `/api/chart?symbol=${encodeURIComponent(symbol)}&range=6mo&interval=1d`;
+  const directUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=6mo&interval=1d`;
+  const request = fetch(proxyUrl)
+    .then((response) => (response.ok ? response : fetch(directUrl)))
+    .catch(() => fetch(directUrl))
+    .then((response) => {
+      if (!response.ok) throw new Error(`Yahoo chart request failed: ${response.status}`);
+      return response.json();
+    })
+    .then((payload) => {
+      const result = payload.chart?.result?.[0];
+      if (!result) throw new Error("No chart result");
+      const stock = buildDynamicStock(entry, result);
+      dynamicStockCache.set(entry.code, stock);
+      return stock;
+    })
+    .finally(() => dynamicStockRequests.delete(entry.code));
+
+  dynamicStockRequests.set(entry.code, request);
+  return request;
+}
+
 function setupCollapsiblePanels() {
   const panels = document.querySelectorAll(".price-panel, .signal-card, .mode-panel, .chart-panel, .analysis-panel, .roadmap");
   panels.forEach((panel, index) => {
@@ -171,7 +279,7 @@ function renderSearchResults(query = "") {
       const meta = [stock.code, stock.market, stock.sector || stock.industry].filter(Boolean).join(" · ");
       return `<button class="search-result" type="button" data-code="${stock.code}">
         <span><strong>${stock.name}</strong><span>${meta}</span></span>
-        <small>${hasDetail ? "상세 분석" : "기본 정보"}</small>
+        <small>${hasDetail ? "상세 분석" : "실시간 분석"}</small>
       </button>`;
     })
     .join("");
@@ -505,16 +613,7 @@ function renderUnavailable(entry) {
   renderWatchlist();
 }
 
-function render() {
-  const detailedStock = data.stocks.find((item) => item.code === state.selectedCode);
-  if (!detailedStock) {
-    const entry = getStockEntry(state.selectedCode);
-    if (entry) {
-      renderUnavailable(entry);
-      return;
-    }
-  }
-  const stock = detailedStock || getStock();
+function renderDetailedStock(stock) {
   const analysis = engine.analyze(stock, data.market, state.mode);
   renderMode();
   renderSummary(stock, analysis);
@@ -524,6 +623,37 @@ function render() {
   drawChart(stock, analysis);
   setupCollapsiblePanels();
   requestAnimationFrame(layoutAnalysisMasonry);
+}
+
+function render() {
+  const detailedStock = data.stocks.find((item) => item.code === state.selectedCode);
+  if (detailedStock) {
+    renderDetailedStock(detailedStock);
+    return;
+  }
+
+  const entry = getStockEntry(state.selectedCode);
+  if (entry) {
+    const cachedStock = dynamicStockCache.get(entry.code);
+    if (cachedStock) {
+      renderDetailedStock(cachedStock);
+      return;
+    }
+
+    renderUnavailable(entry);
+    fetchDynamicStock(entry)
+      .then((stock) => {
+        if (state.selectedCode === stock.code) renderDetailedStock(stock);
+      })
+      .catch(() => {
+        if (state.selectedCode === entry.code) {
+          $("confidence").textContent = "참고용 · 실시간 가격 자동 조회가 지연되어 TradingView 차트를 우선 표시합니다.";
+        }
+      });
+    return;
+  }
+
+  renderDetailedStock(getStock());
 }
 
 function selectStock(code, options = {}) {
