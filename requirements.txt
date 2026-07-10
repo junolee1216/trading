@@ -1,0 +1,4 @@
+finance-datareader
+beautifulsoup4
+requests
+lxml

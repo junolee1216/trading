@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>코스피/코스닥 데이터 판단 대시보드</title>
+    <link rel="stylesheet" href="./styles.css?v=collapse-button-layout-20260701" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">KR</span>
+        <div>
+          <strong>한국주식 데이터 판단</strong>
+          <span>KOSPI/KOSDAQ 참고 분석</span>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <label class="sr-only" for="stock-search">종목명 또는 종목코드 검색</label>
+        <input id="stock-search" type="search" autocomplete="off" placeholder="종목명 또는 종목코드 입력" />
+        <div id="search-results" class="search-results" aria-live="polite"></div>
+      </div>
+
+      <button id="watchlist-toggle" class="ghost-button" type="button">관심 종목</button>
+      <a class="notice-link" href="#investment-notice">투자 유의사항</a>
+    </header>
+
+    <main class="layout">
+      <aside id="watchlist-panel" class="watchlist-panel" aria-label="관심 종목">
+        <div class="section-heading">
+          <h2>관심 종목</h2>
+          <button id="watchlist-close" class="icon-button" type="button" aria-label="관심 종목 닫기">x</button>
+        </div>
+        <div id="watchlist-items" class="watchlist-items"></div>
+      </aside>
+
+      <section class="dashboard">
+        <div id="investment-notice" class="notice-banner is-hidden" aria-hidden="true">
+          최종 투자 판단과 책임은 사용자 본인에게 있으며, 과거 데이터와 알고리즘 판단은 미래 수익률을 보장하지 않습니다.
+        </div>
+
+        <section class="summary-grid research-summary">
+          <article class="price-panel">
+            <div class="stock-title-row">
+              <div>
+                <p id="stock-market" class="meta"></p>
+                <h1 id="stock-name"></h1>
+                <p id="stock-code" class="subtle"></p>
+              </div>
+              <button id="watch-button" class="secondary-button" type="button">관심 추가</button>
+            </div>
+            <div class="price-line">
+              <strong id="latest-price"></strong>
+              <span id="change-rate"></span>
+            </div>
+            <dl class="metric-list compact">
+              <div><dt>거래량</dt><dd id="volume"></dd></div>
+              <div><dt>시가총액</dt><dd id="market-cap"></dd></div>
+              <div><dt>52주 최고/최저</dt><dd id="week-range"></dd></div>
+              <div><dt>업데이트</dt><dd id="updated-at"></dd></div>
+            </dl>
+          </article>
+
+          <article id="signal-card" class="signal-card decision-panel">
+            <p class="meta">최종 참고 신호</p>
+            <div class="signal-main">
+              <strong id="final-signal"></strong>
+              <span id="total-score"></span>
+            </div>
+            <div class="scorebar" aria-hidden="true"><span id="scorebar-fill"></span></div>
+            <p id="confidence" class="confidence"></p>
+            <ul id="top-reasons" class="reason-list"></ul>
+          </article>
+
+          <article class="mode-panel">
+            <div class="section-heading">
+              <h2>분석 모드</h2>
+            </div>
+            <div class="mode-grid" role="radiogroup" aria-label="투자 유형">
+              <button class="mode-option active" type="button" data-mode="short">단기 투자</button>
+              <button class="mode-option" type="button" data-mode="balanced">중장기 투자</button>
+              <button class="mode-option" type="button" data-mode="value">가치 투자</button>
+              <button class="mode-option" type="button" data-mode="dividend">배당 투자</button>
+            </div>
+            <p id="mode-description" class="subtle"></p>
+          </article>
+        </section>
+
+        <section class="content-grid research-grid">
+          <article class="chart-panel">
+            <div class="section-heading">
+              <h2>가격 차트</h2>
+              <div class="legend">
+                <span><i class="candle-up"></i>상승</span>
+                <span><i class="candle-down"></i>하락</span>
+                <span><i class="ma-line"></i>20일선</span>
+                <span><i class="signal-dot"></i>신호</span>
+              </div>
+            </div>
+            <canvas id="price-chart" width="1100" height="460"></canvas>
+          </article>
+
+          <section class="analysis-masonry">
+          <article class="analysis-panel technical-panel">
+            <div class="section-heading"><h2>기술적 분석</h2><span id="technical-score"></span></div>
+            <div id="technical-grid" class="indicator-grid"></div>
+          </article>
+
+          <article class="analysis-panel fundamental-panel">
+            <div class="section-heading"><h2>기본적 분석</h2><span id="fundamental-score"></span></div>
+            <div id="fundamental-grid" class="indicator-grid"></div>
+          </article>
+
+          <article class="analysis-panel flow-panel">
+            <div class="section-heading"><h2>수급 분석</h2><span id="flow-score"></span></div>
+            <div id="flow-grid" class="flow-grid"></div>
+          </article>
+
+          <article class="analysis-panel news-panel">
+            <div class="section-heading"><h2>뉴스/공시 요약</h2><span id="news-score"></span></div>
+            <div id="news-list" class="news-list"></div>
+          </article>
+
+          <article class="analysis-panel market-panel">
+            <div class="section-heading"><h2>시장 상황</h2><span id="market-score"></span></div>
+            <div id="market-grid" class="indicator-grid"></div>
+          </article>
+
+          <article class="analysis-panel risk-panel">
+            <div class="section-heading"><h2>리스크 요인</h2></div>
+            <ul id="risk-list" class="risk-list"></ul>
+          </article>
+
+          <article class="analysis-panel backtest-panel">
+            <div class="section-heading"><h2>백테스트 요약</h2></div>
+            <div id="backtest-grid" class="metric-cards"></div>
+            <p class="fine-print">과거 성과는 미래 수익률을 보장하지 않습니다.</p>
+          </article>
+          </section>
+        </section>
+
+        <section class="roadmap">
+          <div>
+            <h2>MVP 포함 범위</h2>
+            <p>종목 검색, 가격/차트, 이동평균선, RSI, 거래량 변화, 기본 재무 지표, 점수 기반 신호, 핵심 근거 3가지, 투자 유의사항을 우선 제공합니다.</p>
+          </div>
+          <div>
+            <h2>확장 설계</h2>
+            <p>뉴스/공시 감성 분석, 투자자 수급, 백테스트, 관심 종목, 알림, 배치 업데이트, PostgreSQL 저장소와 API를 단계적으로 연결할 수 있도록 모듈을 분리했습니다.</p>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <span id="footer-update"></span>
+          <span>분석 결과는 참고용이며, 투자 유의사항을 확인한 뒤 판단해 주세요.</span>
+        </footer>
+      </section>
+    </main>
+
+    <script src="./stockUniverse.js?v=universe-20260701"></script>
+    <script src="./stockSearchRank.js?v=rank-20260701b"></script>
+    <script src="./data.js?v=data-20260701165235"></script>
+    <script src="./analysisEngine.js?v=naver-current-20260701b"></script>
+    <script src="./app.js?v=type-to-search-20260701b"></script>
+  </body>
+</html>

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>한국주식 데이터 판단 대시보드 UX/UI 샘플</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="review-header">
+      <div>
+        <p class="eyebrow">UX/UI Review</p>
+        <h1>한국주식 데이터 판단 대시보드 디자인 샘플 3안</h1>
+        <p>동일한 투자 참고 기능을 기준으로, 신뢰형, 트레이딩형, 초보자 친화형의 세 가지 시각 방향을 비교합니다.</p>
+      </div>
+      <a href="../index.html">현재 앱으로 돌아가기</a>
+    </header>
+
+    <main>
+      <section class="review-summary">
+        <article>
+          <h2>현재 UX 진단</h2>
+          <ul>
+            <li>핵심 신호, 점수, 신뢰도는 잘 갖춰져 있지만 정보 위계가 더 강해지면 첫 판단 속도가 빨라집니다.</li>
+            <li>차트와 분석 카드가 같은 무게로 보이므로 투자자 유형에 따라 강조 영역을 다르게 보여주는 구성이 유리합니다.</li>
+            <li>투자 유의사항은 토글 방식으로 개선되어 방해는 줄었지만, 신호 옆에도 짧은 참고용 라벨은 유지하는 편이 안전합니다.</li>
+            <li>관심 종목, 알림, 백테스트는 현재 보조 영역인데, 실제 사용 빈도를 고려하면 우측 고정 패널 또는 하단 요약 바가 적합합니다.</li>
+          </ul>
+        </article>
+        <article>
+          <h2>디자인 원칙</h2>
+          <ul>
+            <li>매수/매도 단정처럼 보이지 않도록 “고려”, “관망”, “리스크” 표현을 유지합니다.</li>
+            <li>점수는 단독으로 두지 않고 항상 근거, 신뢰도, 리스크와 함께 배치합니다.</li>
+            <li>한국 주식 투자자에게 익숙한 빨강 상승, 파랑 하락 체계를 유지합니다.</li>
+            <li>모바일에서는 검색, 신호, 핵심 근거 3개, 차트를 우선 보여주고 세부 분석은 접히는 구조가 좋습니다.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="style-block style-trust">
+        <div class="style-intro">
+          <p class="eyebrow">Style 01</p>
+          <h2>신뢰형 리서치 터미널</h2>
+          <p>은행, 증권사 리서치 화면처럼 차분하고 제도권 금융 서비스에 가까운 방향입니다. 장기 투자자와 가치 투자자에게 적합합니다.</p>
+        </div>
+        <div class="sample-shell trust-shell">
+          <nav class="sample-topbar">
+            <strong>KR Signal Research</strong>
+            <input value="삼성전자 005930" aria-label="샘플 검색창" />
+            <span>투자 유의사항</span>
+          </nav>
+          <section class="trust-grid">
+            <article class="hero-card">
+              <span>KOSPI · 반도체</span>
+              <h3>삼성전자</h3>
+              <div class="price-row"><strong>78,200원</strong><em>+1.43%</em></div>
+              <p>데이터 업데이트 2026-06-26 15:45</p>
+            </article>
+            <article class="decision-card">
+              <span>최종 참고 신호</span>
+              <h3>매수 고려</h3>
+              <div class="meter"><i style="width: 88%"></i></div>
+              <p>종합 88.0점 · 신뢰도 높음</p>
+            </article>
+            <article class="reason-card">
+              <h3>핵심 근거</h3>
+              <ol>
+                <li>외국인과 기관이 최근 5거래일 동반 순매수입니다.</li>
+                <li>주가가 20일 이동평균선 위에 있어 단기 흐름이 우호적입니다.</li>
+                <li>PER이 업종 평균보다 낮아 가격 부담이 일부 완화됩니다.</li>
+              </ol>
+            </article>
+            <article class="wide-chart">
+              <div class="chart-lines">
+                <i></i><i></i><i></i><i></i><i></i>
+                <b></b>
+              </div>
+            </article>
+          </section>
+        </div>
+      </section>
+
+      <section class="style-block style-trader">
+        <div class="style-intro">
+          <p class="eyebrow">Style 02</p>
+          <h2>액티브 트레이딩 워크스테이션</h2>
+          <p>차트와 수급, 신호 변화를 빠르게 보는 단기 투자자용입니다. 어두운 배경을 쓰되 정보 대비를 높이고, 카드 장식보다 데이터 밀도를 우선합니다.</p>
+        </div>
+        <div class="sample-shell trader-shell">
+          <nav class="trader-topbar">
+            <strong>KR Pulse</strong>
+            <input value="SK하이닉스" aria-label="샘플 검색창" />
+            <button>관심 종목</button>
+          </nav>
+          <section class="trader-grid">
+            <article class="ticker-strip">
+              <span>KOSPI 2,924.18 -0.42%</span>
+              <span>KOSDAQ 842.67 +0.18%</span>
+              <span>USD/KRW 1,378.5</span>
+            </article>
+            <article class="trader-chart">
+              <div class="candles">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </article>
+            <aside class="trader-signal">
+              <span>Signal</span>
+              <h3>매수 고려</h3>
+              <strong>92.4점</strong>
+              <p>거래량 증가와 20일선 상향 흐름이 동시에 확인되었습니다.</p>
+            </aside>
+            <article class="order-flow">
+              <h3>수급 흐름</h3>
+              <div><span>외국인 5일</span><strong>+6,100억</strong></div>
+              <div><span>기관 5일</span><strong>+2,850억</strong></div>
+              <div><span>개인 5일</span><em>-4,100억</em></div>
+            </article>
+          </section>
+        </div>
+      </section>
+
+      <section class="style-block style-guide">
+        <div class="style-intro">
+          <p class="eyebrow">Style 03</p>
+          <h2>초보자 친화형 판단 가이드</h2>
+          <p>복잡한 지표를 바로 보여주기보다 “왜 이런 판단인지”를 단계적으로 설명합니다. 첫 투자자, 모바일 사용자, 장기 보유 점검 사용자에게 적합합니다.</p>
+        </div>
+        <div class="sample-shell guide-shell">
+          <nav class="guide-topbar">
+            <strong>주식 판단 가이드</strong>
+            <button>투자 유의사항</button>
+          </nav>
+          <section class="guide-layout">
+            <article class="guide-main">
+              <span>카카오 · KOSPI</span>
+              <h3>지금은 보유/관망에 가깝습니다</h3>
+              <p>기술적 반등은 일부 보이지만, 수급과 실적 지표가 아직 충분히 맞물리지 않았습니다.</p>
+              <div class="guide-score">
+                <strong>54점</strong>
+                <span>신뢰도 보통</span>
+              </div>
+            </article>
+            <article class="guide-steps">
+              <h3>이렇게 판단했어요</h3>
+              <div><b>1</b><p>주가가 단기 이동평균선 근처까지 회복했습니다.</p></div>
+              <div><b>2</b><p>외국인과 기관은 최근 순매도라 수급은 약합니다.</p></div>
+              <div><b>3</b><p>플랫폼 규제 뉴스가 리스크로 반영되었습니다.</p></div>
+            </article>
+            <article class="guide-risk">
+              <h3>확인할 리스크</h3>
+              <span>실적 둔화</span>
+              <span>수급 약세</span>
+              <span>규제 뉴스</span>
+            </article>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
