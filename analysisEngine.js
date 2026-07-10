@@ -120,17 +120,18 @@ window.AnalysisEngine = (() => {
     const f = stock.fundamentals;
     const avg = stock.sectorAverage;
     const valued = (value) => value !== null && value !== undefined;
+    const neutral = (max) => Math.round(max * 0.52);
     const checks = [
-      ["PER", f.per, avg.per, valued(f.per) ? (f.per <= 12 ? 8 : f.per <= 25 ? 6 : 3) : 2, valued(f.per) ? "네이버 증권 제공 PER 기준입니다." : "PER 데이터 연결이 필요합니다."],
-      ["PBR", f.pbr, avg.pbr, valued(f.pbr) ? (f.pbr <= 1 ? 8 : f.pbr <= 3 ? 5 : 3) : 2, valued(f.pbr) ? "네이버 증권 제공 PBR 기준입니다." : "PBR 데이터 연결이 필요합니다."],
-      ["ROE", f.roe, avg.roe, valued(f.roe) ? (f.roe > 12 ? 8 : f.roe > 0 ? 5 : 2) : 2, valued(f.roe) ? "자기자본이익률을 반영합니다." : "ROE는 별도 재무 API 연결이 필요합니다."],
-      ["매출 성장률", f.revenueGrowth, avg.revenueGrowth, valued(f.revenueGrowth) ? (f.revenueGrowth > 10 ? 8 : f.revenueGrowth > 0 ? 5 : 2) : 2, valued(f.revenueGrowth) ? "성장 지속성을 확인합니다." : "성장률은 별도 재무 API 연결이 필요합니다."],
-      ["영업이익 성장률", f.opGrowth, avg.opGrowth, valued(f.opGrowth) ? (f.opGrowth > 10 ? 8 : f.opGrowth > 0 ? 5 : 2) : 2, valued(f.opGrowth) ? "이익 모멘텀을 반영합니다." : "영업이익 성장률은 별도 재무 API 연결이 필요합니다."],
-      ["순이익 성장률", f.netGrowth, avg.netGrowth, valued(f.netGrowth) ? (f.netGrowth > 10 ? 7 : f.netGrowth > 0 ? 4 : 2) : 2, valued(f.netGrowth) ? "순이익 방향성을 반영합니다." : "순이익 성장률은 별도 재무 API 연결이 필요합니다."],
-      ["부채비율", f.debtRatio, avg.debtRatio, valued(f.debtRatio) ? (f.debtRatio < 80 ? 7 : f.debtRatio < 150 ? 5 : 2) : 2, valued(f.debtRatio) ? "재무 안정성을 확인합니다." : "부채비율은 별도 재무 API 연결이 필요합니다."],
-      ["영업이익률", f.opMargin, avg.opMargin, valued(f.opMargin) ? (f.opMargin > 15 ? 7 : f.opMargin > 0 ? 4 : 2) : 2, valued(f.opMargin) ? "수익성 수준을 반영합니다." : "영업이익률은 별도 재무 API 연결이 필요합니다."],
-      ["배당수익률", f.dividendYield, avg.dividendYield, valued(f.dividendYield) ? (f.dividendYield > 2 ? 5 : 3) : 2, valued(f.dividendYield) ? "네이버 증권 제공 배당수익률 기준입니다." : "배당수익률 데이터 연결이 필요합니다."],
-      ["외국인비율", f.foreignRatio, null, valued(f.foreignRatio) ? (f.foreignRatio > 40 ? 5 : f.foreignRatio > 15 ? 4 : 2) : 2, valued(f.foreignRatio) ? "네이버 증권 제공 외국인 소진율 기준입니다." : "외국인 비율 데이터 연결이 필요합니다."]
+      ["PER", f.per, avg.per, valued(f.per) ? (f.per <= 12 ? 8 : f.per <= 25 ? 6 : 3) : neutral(9), valued(f.per) ? "네이버 증권 제공 PER 기준입니다." : "PER 미확인은 중립으로 반영합니다."],
+      ["PBR", f.pbr, avg.pbr, valued(f.pbr) ? (f.pbr <= 1 ? 8 : f.pbr <= 3 ? 5 : 3) : neutral(9), valued(f.pbr) ? "네이버 증권 제공 PBR 기준입니다." : "PBR 미확인은 중립으로 반영합니다."],
+      ["ROE", f.roe, avg.roe, valued(f.roe) ? (f.roe > 12 ? 8 : f.roe > 0 ? 5 : 2) : neutral(9), valued(f.roe) ? "자기자본이익률을 반영합니다." : "ROE 미확인은 중립으로 반영합니다."],
+      ["매출 성장률", f.revenueGrowth, avg.revenueGrowth, valued(f.revenueGrowth) ? (f.revenueGrowth > 10 ? 8 : f.revenueGrowth > 0 ? 5 : 2) : neutral(9), valued(f.revenueGrowth) ? "성장 지속성을 확인합니다." : "성장률 미확인은 중립으로 반영합니다."],
+      ["영업이익 성장률", f.opGrowth, avg.opGrowth, valued(f.opGrowth) ? (f.opGrowth > 10 ? 8 : f.opGrowth > 0 ? 5 : 2) : neutral(9), valued(f.opGrowth) ? "이익 모멘텀을 반영합니다." : "영업이익 성장률 미확인은 중립으로 반영합니다."],
+      ["순이익 성장률", f.netGrowth, avg.netGrowth, valued(f.netGrowth) ? (f.netGrowth > 10 ? 7 : f.netGrowth > 0 ? 4 : 2) : neutral(9), valued(f.netGrowth) ? "순이익 방향성을 반영합니다." : "순이익 성장률 미확인은 중립으로 반영합니다."],
+      ["부채비율", f.debtRatio, avg.debtRatio, valued(f.debtRatio) ? (f.debtRatio < 80 ? 7 : f.debtRatio < 150 ? 5 : 2) : neutral(9), valued(f.debtRatio) ? "재무 안정성을 확인합니다." : "부채비율 미확인은 중립으로 반영합니다."],
+      ["영업이익률", f.opMargin, avg.opMargin, valued(f.opMargin) ? (f.opMargin > 15 ? 7 : f.opMargin > 0 ? 4 : 2) : neutral(9), valued(f.opMargin) ? "수익성 수준을 반영합니다." : "영업이익률 미확인은 중립으로 반영합니다."],
+      ["배당수익률", f.dividendYield, avg.dividendYield, valued(f.dividendYield) ? (f.dividendYield > 2 ? 5 : 3) : neutral(5), valued(f.dividendYield) ? "네이버 증권 제공 배당수익률 기준입니다." : "배당수익률 미확인은 중립으로 반영합니다."],
+      ["외국인비율", f.foreignRatio, null, valued(f.foreignRatio) ? (f.foreignRatio > 40 ? 5 : f.foreignRatio > 15 ? 4 : 2) : neutral(5), valued(f.foreignRatio) ? "네이버 증권 제공 외국인 소진율 기준입니다." : "외국인 비율 미확인은 중립으로 반영합니다."]
     ];
     const raw = checks.reduce((sum, item) => sum + item[3], 0);
     return {
@@ -152,9 +153,9 @@ window.AnalysisEngine = (() => {
     const f = stock.flows;
     if (f.available === false) {
       return {
-        raw: 0,
+        raw: 35,
         max: 70,
-        together: "투자자별 수급 데이터가 아직 연결되지 않아 최종 판단 신뢰도를 낮게 반영합니다.",
+        together: "투자자별 수급 데이터는 미확인 상태라 중립으로 반영합니다.",
         unavailable: true,
         items: [
           { name: "개인", d1: null, d5: null, d20: null },
@@ -185,7 +186,7 @@ window.AnalysisEngine = (() => {
 
   function news(stock) {
     if (!stock.news.length && !stock.disclosures.length) {
-      return { raw: 0, max: 60, items: [], disclosures: [], unavailable: true };
+      return { raw: 30, max: 60, items: [], disclosures: [], unavailable: true };
     }
     let raw = 35;
     stock.news.forEach((item) => {
@@ -222,8 +223,8 @@ window.AnalysisEngine = (() => {
   }
 
   function confidence(stock, sections, totalScore) {
-    const missingPenalty = sections.fundamental.missing * 10;
-    const unavailablePenalty = (sections.flow.unavailable ? 18 : 0) + (sections.news.unavailable ? 14 : 0);
+    const missingPenalty = sections.fundamental.missing * 3;
+    const unavailablePenalty = (sections.flow.unavailable ? 7 : 0) + (sections.news.unavailable ? 6 : 0);
     const volatility = Math.abs(stock.changeRate) + Math.abs(sections.technical.indicators.volChange) / 10;
     const sectionScores = [sections.technical, sections.fundamental, sections.flow, sections.news, sections.market].map((section) => section.raw / section.max);
     const agreement = 1 - (Math.max(...sectionScores) - Math.min(...sectionScores));
@@ -261,9 +262,11 @@ window.AnalysisEngine = (() => {
       stock.price > sections.technical.indicators.ma20
         ? "주가가 20일 이동평균선 위에 있어 단기 추세가 우호적으로 반영되었습니다."
         : "주가가 20일 이동평균선 아래에 있어 추세 회복 확인이 필요합니다.",
-      stock.fundamentals.per && stock.fundamentals.per < stock.sectorAverage.per
+      stock.fundamentals.per && stock.sectorAverage.per && stock.fundamentals.per < stock.sectorAverage.per
         ? `PER이 업종 평균보다 낮아 가격 부담이 일부 완화됩니다.`
-        : `밸류에이션 또는 이익 성장 지표가 업종 평균 대비 부담으로 반영되었습니다.`
+        : stock.fundamentals.per
+          ? `밸류에이션 지표는 단독 기준으로 참고 반영되었습니다.`
+          : `재무 지표 미확인 항목은 매도 근거가 아니라 중립으로 반영되었습니다.`
     ];
 
     const risks = [];
