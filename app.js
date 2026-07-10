@@ -46,15 +46,17 @@ function renderTradingViewChart(entry) {
   if (!container || !entry?.code) return;
   const renderId = tradingViewRenderId + 1;
   tradingViewRenderId = renderId;
-  container.innerHTML = `<div class="tradingview-loading">Loading TradingView chart for ${entry.name || entry.code}...</div>`;
+  const symbol = tradingViewSymbol(entry.code);
+  const widgetContainerId = `tradingview-widget-${renderId}`;
+  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div class="tradingview-loading">Loading TradingView chart...</div>`;
 
   loadTradingViewScript()
     .then(() => {
       if (renderId !== tradingViewRenderId || !window.TradingView) return;
-      container.innerHTML = "";
+      container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div id="${widgetContainerId}" class="tradingview-widget-target"></div>`;
       new window.TradingView.widget({
         autosize: true,
-        symbol: tradingViewSymbol(entry.code),
+        symbol,
         interval: "D",
         timezone: "Asia/Seoul",
         theme: "light",
@@ -68,7 +70,7 @@ function renderTradingViewChart(entry) {
         details: true,
         hotlist: false,
         calendar: false,
-        container_id: "tradingview-chart"
+        container_id: widgetContainerId
       });
     })
     .catch(() => {

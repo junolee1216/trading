@@ -542,9 +542,23 @@ dd {
   background: #ffffff;
 }
 
+.tradingview-status {
+  min-height: 34px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tradingview-widget-target {
+  width: 100%;
+  height: calc(100% - 34px);
+}
+
 .tradingview-loading {
   display: grid;
-  min-height: 520px;
+  min-height: 486px;
   place-items: center;
   padding: 18px;
   color: var(--muted);
