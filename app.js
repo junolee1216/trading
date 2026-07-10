@@ -108,6 +108,19 @@ function saveCollapsedPanels() {
   localStorage.setItem("kr-collapsed-panels", JSON.stringify(state.collapsedPanels));
 }
 
+function getSearchMatches(query = "") {
+  const normalizedKeyword = compactText(query);
+  if (!normalizedKeyword) return [];
+  return stockUniverse.filter((stock) => {
+    const haystack = `${stock.name} ${stock.code} ${stock.market} ${stock.sector || ""} ${stock.industry || ""}`.toLowerCase();
+    return haystack.replace(/\s+/g, "").includes(normalizedKeyword);
+  }).sort((a, b) => {
+    const scoreDiff = searchPriority(a, normalizedKeyword) - searchPriority(b, normalizedKeyword);
+    if (scoreDiff !== 0) return scoreDiff;
+    return (stockSearchRank[a.code] || 999999) - (stockSearchRank[b.code] || 999999);
+  });
+}
+
 function setupCollapsiblePanels() {
   const panels = document.querySelectorAll(".price-panel, .signal-card, .mode-panel, .chart-panel, .analysis-panel, .roadmap");
   panels.forEach((panel, index) => {
@@ -172,14 +185,7 @@ function renderSearchResults(query = "") {
     target.style.display = "none";
     return;
   }
-  const matches = stockUniverse.filter((stock) => {
-    const haystack = `${stock.name} ${stock.code} ${stock.market} ${stock.sector || ""} ${stock.industry || ""}`.toLowerCase();
-    return !normalizedKeyword || haystack.replace(/\s+/g, "").includes(normalizedKeyword);
-  }).sort((a, b) => {
-    const scoreDiff = searchPriority(a, normalizedKeyword) - searchPriority(b, normalizedKeyword);
-    if (scoreDiff !== 0) return scoreDiff;
-    return (stockSearchRank[a.code] || 999999) - (stockSearchRank[b.code] || 999999);
-  });
+  const matches = getSearchMatches(query);
   target.innerHTML = matches
     .slice(0, 80)
     .map((stock) => {
@@ -542,16 +548,28 @@ function render() {
   requestAnimationFrame(layoutAnalysisMasonry);
 }
 
-function selectStock(code) {
+function selectStock(code, options = {}) {
+  const { clearSearch = true, hideResults = true } = options;
   state.selectedCode = code;
-  $("stock-search").value = "";
-  $("search-results").style.display = "none";
+  if (clearSearch) $("stock-search").value = "";
+  if (hideResults) $("search-results").style.display = "none";
   render();
 }
 
-$("stock-search").addEventListener("input", (event) => renderSearchResults(event.target.value));
-$("stock-search").addEventListener("keyup", (event) => renderSearchResults(event.target.value));
-$("stock-search").addEventListener("change", (event) => renderSearchResults(event.target.value));
+function handleSearchInput(event) {
+  const query = event.target.value;
+  renderSearchResults(query);
+  const normalizedKeyword = compactText(query);
+  if (normalizedKeyword.length < 2) return;
+  const bestMatch = getSearchMatches(query)[0];
+  if (bestMatch && bestMatch.code !== state.selectedCode) {
+    selectStock(bestMatch.code, { clearSearch: false, hideResults: false });
+  }
+}
+
+$("stock-search").addEventListener("input", handleSearchInput);
+$("stock-search").addEventListener("keyup", handleSearchInput);
+$("stock-search").addEventListener("change", handleSearchInput);
 $("stock-search").addEventListener("click", (event) => renderSearchResults(event.target.value));
 $("search-results").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-code]");
