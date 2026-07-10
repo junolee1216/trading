@@ -551,14 +551,11 @@ dd {
   font-weight: 700;
 }
 
-.tradingview-widget-target {
+.tradingview-iframe {
   width: 100%;
   height: calc(100% - 34px);
-}
-
-.tradingview-widget-container {
-  width: 100%;
-  height: calc(100% - 34px);
+  border: 0;
+  display: block;
 }
 
 .tradingview-loading {

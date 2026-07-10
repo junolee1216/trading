@@ -32,31 +32,26 @@ function renderTradingViewChart(entry) {
   const renderId = tradingViewRenderId + 1;
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
-  const widgetContainerId = `tradingview-widget-${renderId}`;
-  const config = {
-    autosize: true,
+  const params = new URLSearchParams({
+    frameElementId: `tradingview-frame-${renderId}`,
     symbol,
     interval: "D",
-    timezone: "Asia/Seoul",
+    hidesidetoolbar: "0",
+    symboledit: "1",
+    saveimage: "1",
+    toolbarbg: "f4f7fb",
+    studies: "[]",
     theme: "light",
     style: "1",
+    timezone: "Asia/Seoul",
+    withdateranges: "1",
+    hideideas: "1",
     locale: "kr",
-    allow_symbol_change: true,
-    calendar: false,
-    support_host: "https://www.tradingview.com"
-  };
+    calendar: "0"
+  });
+  const iframeSrc = `https://s.tradingview.com/widgetembed/?${params.toString()}`;
 
-  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div class="tradingview-widget-container"><div id="${widgetContainerId}" class="tradingview-widget-target"></div></div>`;
-  const script = document.createElement("script");
-  script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-  script.async = true;
-  script.textContent = JSON.stringify(config);
-  script.onerror = () => {
-    if (renderId === tradingViewRenderId) {
-      container.innerHTML = "<div class=\"tradingview-loading\">TradingView chart could not be loaded. Please check the network connection.</div>";
-    }
-  };
-  container.querySelector(".tradingview-widget-container").appendChild(script);
+  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><iframe id="tradingview-frame-${renderId}" class="tradingview-iframe" title="${entry.name || entry.code} TradingView chart" src="${iframeSrc}" allowtransparency="true" scrolling="no"></iframe>`;
 }
 
 function searchPriority(stock, normalizedKeyword) {
