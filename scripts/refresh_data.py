@@ -13,12 +13,38 @@ DATA_JS = APP_DIR / "data.js"
 INDEX_HTML = APP_DIR / "index.html"
 
 STOCKS = [
-    ("005930", "삼성전자", "반도체"),
-    ("000660", "SK하이닉스", "반도체"),
-    ("068270", "셀트리온", "바이오"),
-    ("035420", "NAVER", "인터넷"),
-    ("035720", "카카오", "인터넷"),
-    ("247540", "에코프로비엠", "2차전지"),
+    ("005930", "삼성전자", "KOSPI", "반도체"),
+    ("000660", "SK하이닉스", "KOSPI", "반도체"),
+    ("373220", "LG에너지솔루션", "KOSPI", "2차전지"),
+    ("207940", "삼성바이오로직스", "KOSPI", "바이오"),
+    ("005380", "현대차", "KOSPI", "자동차"),
+    ("000270", "기아", "KOSPI", "자동차"),
+    ("068270", "셀트리온", "KOSPI", "바이오"),
+    ("035420", "NAVER", "KOSPI", "인터넷"),
+    ("035720", "카카오", "KOSPI", "인터넷"),
+    ("005490", "POSCO홀딩스", "KOSPI", "철강"),
+    ("051910", "LG화학", "KOSPI", "화학"),
+    ("006400", "삼성SDI", "KOSPI", "2차전지"),
+    ("105560", "KB금융", "KOSPI", "금융"),
+    ("055550", "신한지주", "KOSPI", "금융"),
+    ("086790", "하나금융지주", "KOSPI", "금융"),
+    ("012330", "현대모비스", "KOSPI", "자동차부품"),
+    ("028260", "삼성물산", "KOSPI", "지주"),
+    ("066570", "LG전자", "KOSPI", "전자"),
+    ("096770", "SK이노베이션", "KOSPI", "에너지"),
+    ("323410", "카카오뱅크", "KOSPI", "금융"),
+    ("259960", "크래프톤", "KOSPI", "게임"),
+    ("034020", "두산에너빌리티", "KOSPI", "기계"),
+    ("012450", "한화에어로스페이스", "KOSPI", "방산"),
+    ("329180", "HD현대중공업", "KOSPI", "조선"),
+    ("017670", "SK텔레콤", "KOSPI", "통신"),
+    ("030200", "KT", "KOSPI", "통신"),
+    ("003670", "포스코퓨처엠", "KOSPI", "2차전지"),
+    ("247540", "에코프로비엠", "KOSDAQ", "2차전지"),
+    ("086520", "에코프로", "KOSDAQ", "2차전지"),
+    ("196170", "알테오젠", "KOSDAQ", "바이오"),
+    ("028300", "HLB", "KOSDAQ", "바이오"),
+    ("035900", "JYP Ent.", "KOSDAQ", "엔터"),
 ]
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -81,7 +107,7 @@ def parse_company_info(soup):
     return market_cap, foreign_ratio, week_high, week_low
 
 
-def read_naver_stock(code, fallback_name, sector):
+def read_naver_stock(code, fallback_name, market, sector):
     response = requests.get(
         f"https://finance.naver.com/item/main.naver?code={code}",
         headers=HEADERS,
@@ -132,7 +158,7 @@ def read_naver_stock(code, fallback_name, sector):
     return {
         "code": code,
         "name": name,
-        "market": "KOSDAQ" if code == "247540" else "KOSPI",
+        "market": market,
         "sector": sector,
         "price": int(price or closes[-1]),
         "changeRate": rate,
