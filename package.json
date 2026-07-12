@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
-  },
-  "devDependencies": {
-    "vite": "^7.0.4"
+    "build": "node scripts/build-sites.mjs"
   }
 }
