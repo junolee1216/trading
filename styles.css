@@ -543,12 +543,22 @@ dd {
 }
 
 .tradingview-status {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
   min-height: 34px;
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.chart-mode-status {
+  flex: 0 0 auto;
+  color: var(--blue);
+  font-weight: 900;
 }
 
 .chart-toolbar {
@@ -831,10 +841,30 @@ canvas {
 
 .roadmap {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  align-items: start;
   margin-top: 16px;
-  padding: 18px;
+  padding: 22px 18px 18px;
+  text-align: left;
+}
+
+.roadmap > .collapse-bar {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 1;
+  min-height: 0;
+  margin: 0;
+}
+
+.roadmap > div {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.roadmap h2 {
+  text-align: left;
 }
 
 .roadmap-list,

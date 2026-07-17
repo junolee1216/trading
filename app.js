@@ -60,7 +60,10 @@ function renderTradingViewChart(entry) {
   ];
 
   container.innerHTML = `
-    <div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div>
+    <div class="tradingview-status">
+      <span>${entry.name || entry.code} · ${symbol}</span>
+      <span class="chart-mode-status">${currentChartModeText()}</span>
+    </div>
     <div class="chart-toolbar" aria-label="차트 도구">
       ${intervalButtons.map(([value, label]) => `<button class="chart-tool ${state.chartInterval === value ? "active" : ""}" type="button" data-chart-interval="${value}">${label}</button>`).join("")}
       <span class="chart-divider"></span>
@@ -114,11 +117,19 @@ function chartToolLabel(value) {
   }[value] || "보조 도구";
 }
 
+function chartStyleLabel(value) {
+  return value === "line" ? "라인" : "캔들";
+}
+
+function currentChartModeText() {
+  return `${intervalLabel(state.chartInterval)} · ${chartStyleLabel(state.chartStyle)} · ${chartToolLabel(state.activeDrawingTool)}`;
+}
+
 function intervalDefaultRange(value) {
   if (value === "1") return "20";
   if (value === "30") return "30";
   if (value === "60") return "40";
-  return state.chartRange || "all";
+  return "all";
 }
 
 function bindChartControls() {
@@ -548,6 +559,9 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
   [maxPrice, (maxPrice + minPrice) / 2, minPrice].forEach((price) => {
     ctx.fillText(Math.round(price).toLocaleString(), 6, y(price) + 4);
   });
+  ctx.fillStyle = "#17212b";
+  ctx.font = "700 13px Segoe UI";
+  ctx.fillText(currentChartModeText(), pad.left, 18);
 
   const maxVolume = Math.max(...volumes);
   volumes.forEach((volume, index) => {
