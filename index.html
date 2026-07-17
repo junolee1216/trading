@@ -98,14 +98,6 @@
                 <span><i class="signal-dot"></i>신호</span>
               </div>
             </div>
-            <div class="chart-symbol-control">
-              <label for="chart-stock-search">차트 종목 변경</label>
-              <div class="chart-search-wrap">
-                <input id="chart-stock-search" type="search" autocomplete="off" placeholder="차트에 표시할 종목명 또는 코드 입력" />
-                <div id="chart-search-results" class="chart-search-results" aria-live="polite"></div>
-              </div>
-              <span id="chart-selected-symbol" class="chart-selected-symbol"></span>
-            </div>
             <div id="tradingview-chart" class="tradingview-chart"></div>
             <p class="chart-source-note">선택한 종목 데이터로 직접 그린 차트입니다. 이동평균선, 거래량, 지지선/저항선, 참고 신호 지점을 함께 표시합니다.</p>
           </article>
@@ -152,11 +144,21 @@
         <section class="roadmap">
           <div>
             <h2>MVP 포함 범위</h2>
-            <p>종목 검색, 가격/차트, 이동평균선, RSI, 거래량 변화, 기본 재무 지표, 점수 기반 신호, 핵심 근거 3가지, 투자 유의사항을 우선 제공합니다.</p>
+            <ul class="roadmap-list">
+              <li>종목 검색과 최신 가격/등락률 표시</li>
+              <li>가격 차트, 거래량, 이동평균선, RSI</li>
+              <li>간단한 재무 지표와 점수 기반 참고 신호</li>
+              <li>핵심 판단 근거 3가지와 투자 유의사항</li>
+            </ul>
           </div>
           <div>
             <h2>확장 설계</h2>
-            <p>뉴스/공시 감성 분석, 투자자 수급, 백테스트, 관심 종목, 알림, 배치 업데이트, PostgreSQL 저장소와 API를 단계적으로 연결할 수 있도록 모듈을 분리했습니다.</p>
+            <ul class="roadmap-list">
+              <li>뉴스/공시 감성 분석과 주요 리스크 분류</li>
+              <li>투자자별 수급, 백테스트, 관심 종목</li>
+              <li>알림 조건, 장마감 배치 업데이트, API 연동</li>
+              <li>PostgreSQL 저장소 기반의 자동화 데이터 구조</li>
+            </ul>
           </div>
         </section>
 

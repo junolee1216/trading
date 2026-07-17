@@ -12,10 +12,12 @@ const stockSearchRank = window.KR_STOCK_SEARCH_RANK || {};
 const state = {
   selectedCode: data.stocks[0].code,
   mode: "balanced",
+  chartInterval: "D",
   chartRange: "all",
   chartStyle: "candle",
   showMa: true,
   showSignals: true,
+  activeDrawingTool: "cursor",
   watchlist: JSON.parse(localStorage.getItem("kr-watchlist") || "[]"),
   collapsedPanels: JSON.parse(localStorage.getItem("kr-collapsed-panels") || "[]")
 };
@@ -39,16 +41,28 @@ function renderTradingViewChart(entry) {
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
 
-  const chartInput = $("chart-stock-search");
-  const chartSymbol = $("chart-selected-symbol");
-  if (chartInput && document.activeElement !== chartInput) chartInput.value = `${entry.name || entry.code} (${entry.code})`;
-  if (chartSymbol) chartSymbol.textContent = symbol;
   const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const intervalButtons = [
+    ["1", "1분"],
+    ["30", "30분"],
+    ["60", "1시간"],
+    ["D", "일"]
+  ];
+  const drawingTools = [
+    ["cursor", "+"],
+    ["trend", "/"],
+    ["levels", "="],
+    ["pattern", "◇"],
+    ["brush", "⌁"],
+    ["text", "T"],
+    ["smile", "⌣"],
+    ["zoom", "⌕"]
+  ];
 
   container.innerHTML = `
     <div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div>
     <div class="chart-toolbar" aria-label="차트 도구">
-      ${["1분", "30분", "1시간", "일"].map((label) => `<button class="chart-tool" type="button" data-chart-interval="${label}">${label}</button>`).join("")}
+      ${intervalButtons.map(([value, label]) => `<button class="chart-tool ${state.chartInterval === value ? "active" : ""}" type="button" data-chart-interval="${value}">${label}</button>`).join("")}
       <span class="chart-divider"></span>
       <button class="chart-tool ${state.chartStyle === "candle" ? "active" : ""}" type="button" data-chart-style="candle">캔들</button>
       <button class="chart-tool ${state.chartStyle === "line" ? "active" : ""}" type="button" data-chart-style="line">라인</button>
@@ -59,7 +73,7 @@ function renderTradingViewChart(entry) {
     </div>
     <div class="chart-workspace">
       <div class="chart-drawing-tools" aria-label="보조 도구">
-        ${["+", "/", "=", "◇", "⌁", "T", "⌣", "⌕"].map((label) => `<button type="button" tabindex="-1">${label}</button>`).join("")}
+        ${drawingTools.map(([tool, label]) => `<button class="${state.activeDrawingTool === tool ? "active" : ""}" type="button" data-chart-tool="${tool}" aria-label="${chartToolLabel(tool)}">${label}</button>`).join("")}
       </div>
       <canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>
       <aside id="chart-info-panel" class="chart-info-panel"></aside>
@@ -78,7 +92,43 @@ function renderTradingViewChart(entry) {
   bindChartControls();
 }
 
+function intervalLabel(value) {
+  return {
+    "1": "1분",
+    "30": "30분",
+    "60": "1시간",
+    D: "일"
+  }[value] || "일";
+}
+
+function chartToolLabel(value) {
+  return {
+    cursor: "기본 선택",
+    trend: "추세선",
+    levels: "가격 레벨",
+    pattern: "패턴 표시",
+    brush: "메모 선",
+    text: "텍스트 메모",
+    smile: "관심 표시",
+    zoom: "최근 구간 확대"
+  }[value] || "보조 도구";
+}
+
+function intervalDefaultRange(value) {
+  if (value === "1") return "20";
+  if (value === "30") return "30";
+  if (value === "60") return "40";
+  return state.chartRange || "all";
+}
+
 function bindChartControls() {
+  document.querySelectorAll("[data-chart-interval]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.chartInterval = button.dataset.chartInterval;
+      state.chartRange = intervalDefaultRange(state.chartInterval);
+      render();
+    });
+  });
   document.querySelectorAll("[data-chart-style]").forEach((button) => {
     button.addEventListener("click", () => {
       state.chartStyle = button.dataset.chartStyle;
@@ -95,6 +145,13 @@ function bindChartControls() {
   document.querySelectorAll("[data-chart-range]").forEach((button) => {
     button.addEventListener("click", () => {
       state.chartRange = button.dataset.chartRange;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-chart-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeDrawingTool = button.dataset.chartTool;
+      if (state.activeDrawingTool === "zoom") state.chartRange = "30";
       render();
     });
   });
@@ -338,30 +395,6 @@ function renderSearchResults(query = "") {
   target.style.display = matches.length ? "block" : "none";
 }
 
-function renderChartSearchResults(query = "") {
-  const target = $("chart-search-results");
-  if (!target) return;
-  const normalizedKeyword = compactText(query);
-  if (!normalizedKeyword) {
-    target.innerHTML = "";
-    target.style.display = "none";
-    return;
-  }
-
-  const matches = getSearchMatches(query);
-  target.innerHTML = matches
-    .slice(0, 30)
-    .map((stock) => {
-      const meta = [stock.code, stock.market, stock.sector || stock.industry].filter(Boolean).join(" · ");
-      return `<button class="chart-search-result" type="button" data-code="${stock.code}">
-        <strong>${stock.name}</strong>
-        <span>${meta}</span>
-      </button>`;
-    })
-    .join("");
-  target.style.display = matches.length ? "block" : "none";
-}
-
 function indicatorCard(item) {
   const tag = item.tag || signalFromScore(item.score, item.max);
   return `<div class="indicator-card">
@@ -592,7 +625,98 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     ctx.fillText(analysis.signal, x(signalIndex) + 10, y(prices[signalIndex]) - 10);
   }
 
+  drawActiveToolOverlay(ctx, { width, height, pad, chartHeight, prices, x, y });
+
   if (canvasId === "tradingview-local-chart") renderChartInfo(stock, analysis, prices);
+}
+
+function drawActiveToolOverlay(ctx, chart) {
+  const { width, pad, chartHeight, prices, x, y } = chart;
+  const tool = state.activeDrawingTool;
+  if (!tool || tool === "cursor" || !prices.length) return;
+
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#334155";
+  ctx.fillStyle = "#334155";
+  ctx.font = "700 12px Segoe UI";
+
+  if (tool === "trend") {
+    ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x(1), y(prices[1] || prices[0]));
+    ctx.lineTo(x(prices.length - 2), y(prices[prices.length - 2] || prices[prices.length - 1]));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillText("추세선", x(1) + 8, y(prices[1] || prices[0]) - 8);
+  }
+
+  if (tool === "levels") {
+    [0.25, 0.5, 0.75].forEach((ratio) => {
+      const gy = pad.top + chartHeight * ratio;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, gy);
+      ctx.lineTo(width - pad.right, gy);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    ctx.fillText("레벨", pad.left + 8, pad.top + 18);
+  }
+
+  if (tool === "pattern") {
+    const index = Math.max(0, prices.length - 4);
+    const cx = x(index);
+    const cy = y(prices[index]) - 24;
+    ctx.strokeStyle = "#a86b00";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 10);
+    ctx.lineTo(cx + 10, cy);
+    ctx.lineTo(cx, cy + 10);
+    ctx.lineTo(cx - 10, cy);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillText("패턴", cx + 14, cy + 4);
+  }
+
+  if (tool === "brush") {
+    ctx.strokeStyle = "#1f6fb2";
+    ctx.beginPath();
+    ctx.moveTo(pad.left + 18, pad.top + chartHeight * 0.72);
+    ctx.bezierCurveTo(width * 0.35, pad.top + chartHeight * 0.56, width * 0.52, pad.top + chartHeight * 0.86, width - pad.right - 28, pad.top + chartHeight * 0.62);
+    ctx.stroke();
+  }
+
+  if (tool === "text") {
+    ctx.fillStyle = "#17212b";
+    ctx.fillText("메모", pad.left + 18, pad.top + 28);
+  }
+
+  if (tool === "smile") {
+    const cx = x(prices.length - 1);
+    const cy = y(prices[prices.length - 1]) - 26;
+    ctx.strokeStyle = "#12805c";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx - 4, cy - 3, 1.5, 0, Math.PI * 2);
+    ctx.arc(cx + 4, cy - 3, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy + 2, 5, 0, Math.PI);
+    ctx.stroke();
+  }
+
+  if (tool === "zoom") {
+    ctx.strokeStyle = "#1f6fb2";
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(width - pad.right - 130, pad.top + 12, 108, chartHeight - 24);
+    ctx.setLineDash([]);
+    ctx.fillText("최근 구간", width - pad.right - 122, pad.top + 30);
+  }
+
+  ctx.restore();
 }
 
 function renderChartInfo(stock, analysis, visiblePrices) {
@@ -609,7 +733,9 @@ function renderChartInfo(stock, analysis, visiblePrices) {
     <div class="chart-info-price">${formatWon(stock.price)}</div>
     <div class="${percentClass(stock.changeRate)}">${stock.changeRate > 0 ? "+" : ""}${stock.changeRate.toFixed(2)}%</div>
     <dl>
+      <div><dt>간격</dt><dd>${intervalLabel(state.chartInterval)}</dd></div>
       <div><dt>표시 구간</dt><dd>${state.chartRange === "all" ? "전체" : `${state.chartRange}일`}</dd></div>
+      <div><dt>도구</dt><dd>${chartToolLabel(state.activeDrawingTool)}</dd></div>
       <div><dt>구간 등락</dt><dd class="${percentClass(visibleChange)}">${visibleChange > 0 ? "+" : ""}${visibleChange.toFixed(2)}%</dd></div>
       <div><dt>구간 고가</dt><dd>${formatWon(high)}</dd></div>
       <div><dt>구간 저가</dt><dd>${formatWon(low)}</dd></div>
@@ -811,10 +937,6 @@ function handleSearchInput(event) {
   }
 }
 
-function handleChartSearchInput(event) {
-  renderChartSearchResults(event.target.value);
-}
-
 $("stock-search").addEventListener("input", handleSearchInput);
 $("stock-search").addEventListener("keyup", handleSearchInput);
 $("stock-search").addEventListener("change", handleSearchInput);
@@ -823,33 +945,6 @@ $("search-results").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-code]");
   if (button) selectStock(button.dataset.code);
 });
-if ($("chart-stock-search")) {
-  $("chart-stock-search").addEventListener("focus", (event) => event.target.select());
-  $("chart-stock-search").addEventListener("input", handleChartSearchInput);
-  $("chart-stock-search").addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      $("chart-search-results").style.display = "none";
-      event.currentTarget.blur();
-      return;
-    }
-    if (event.key === "Enter") {
-      const bestMatch = getSearchMatches(event.currentTarget.value)[0];
-      if (bestMatch) {
-        selectStock(bestMatch.code);
-        $("chart-search-results").style.display = "none";
-      }
-    }
-  });
-}
-if ($("chart-search-results")) {
-  $("chart-search-results").addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-code]");
-    if (button) {
-      selectStock(button.dataset.code);
-      $("chart-search-results").style.display = "none";
-    }
-  });
-}
 document.querySelector(".notice-link").addEventListener("click", (event) => {
   event.preventDefault();
   const notice = $("investment-notice");
@@ -869,8 +964,6 @@ document.querySelector(".notice-link").addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const searchWrap = event.target.closest(".search-wrap");
   if (!searchWrap) $("search-results").style.display = "none";
-  const chartSearchWrap = event.target.closest(".chart-search-wrap");
-  if (!chartSearchWrap && $("chart-search-results")) $("chart-search-results").style.display = "none";
 });
 $("stock-search").addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
