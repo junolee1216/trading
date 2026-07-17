@@ -617,7 +617,6 @@ function renderUnavailable(entry) {
   $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>확장 기능에서 제공</span></div>`).join("");
   renderTradingViewChart(entry);
   drawUnavailableChart(entry, "tradingview-local-chart");
-  drawUnavailableChart(entry);
   requestAnimationFrame(layoutAnalysisMasonry);
 
   const watchButton = $("watch-button");
@@ -635,7 +634,6 @@ function renderDetailedStock(stock) {
   renderWatchlist();
   renderTradingViewChart(stock);
   drawChart(stock, analysis, "tradingview-local-chart");
-  drawChart(stock, analysis);
   setupCollapsiblePanels();
   requestAnimationFrame(layoutAnalysisMasonry);
 }
