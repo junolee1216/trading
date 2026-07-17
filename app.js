@@ -417,12 +417,16 @@ function renderChartAnnotations(draft = null) {
     }
     if (annotation.type === "text") {
       const wrapper = document.createElement("div");
-      wrapper.className = "chart-text-note-wrap";
+      wrapper.className = `chart-text-note-wrap ${annotation.text?.trim() ? "has-text" : ""}`;
       wrapper.style.left = `${annotation.x}px`;
       wrapper.style.top = `${annotation.y}px`;
 
       const controls = document.createElement("div");
       controls.className = "chart-text-controls";
+      const moveHandle = document.createElement("span");
+      moveHandle.className = "chart-text-move";
+      moveHandle.textContent = "↕";
+      moveHandle.setAttribute("aria-label", "텍스트 이동");
       const decrease = document.createElement("button");
       decrease.type = "button";
       decrease.textContent = "A-";
@@ -431,7 +435,7 @@ function renderChartAnnotations(draft = null) {
       increase.type = "button";
       increase.textContent = "A+";
       increase.setAttribute("aria-label", "글씨 크게");
-      controls.append(decrease, increase);
+      controls.append(moveHandle, decrease, increase);
 
       const note = document.createElement("div");
       note.className = "chart-text-note";
@@ -460,13 +464,57 @@ function renderChartAnnotations(draft = null) {
       });
       note.addEventListener("input", () => {
         const source = getCurrentAnnotations()[index];
-        if (source) source.text = note.textContent || "";
+        if (source) {
+          source.text = note.textContent || "";
+          wrapper.classList.toggle("has-text", Boolean(source.text.trim()));
+        }
       });
       note.addEventListener("wheel", (event) => {
         event.preventDefault();
         event.stopPropagation();
         updateFontSize(event.deltaY < 0 ? 1 : -1);
       }, { passive: false });
+
+      let dragState = null;
+      moveHandle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveHandle.setPointerCapture(event.pointerId);
+        dragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          originX: annotation.x,
+          originY: annotation.y
+        };
+        wrapper.classList.add("is-dragging");
+      });
+      moveHandle.addEventListener("pointermove", (event) => {
+        if (!dragState) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const source = getCurrentAnnotations()[index];
+        if (!source) return;
+        const shell = $("chart-canvas-shell");
+        const rect = shell?.getBoundingClientRect();
+        const maxX = rect ? rect.width - 20 : Number.POSITIVE_INFINITY;
+        const maxY = rect ? rect.height - 20 : Number.POSITIVE_INFINITY;
+        source.x = Math.max(0, Math.min(maxX, dragState.originX + event.clientX - dragState.startX));
+        source.y = Math.max(0, Math.min(maxY, dragState.originY + event.clientY - dragState.startY));
+        annotation.x = source.x;
+        annotation.y = source.y;
+        wrapper.style.left = `${source.x}px`;
+        wrapper.style.top = `${source.y}px`;
+      });
+      const endDrag = (event) => {
+        if (!dragState) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dragState = null;
+        wrapper.classList.remove("is-dragging");
+      };
+      moveHandle.addEventListener("pointerup", endDrag);
+      moveHandle.addEventListener("pointercancel", endDrag);
       wrapper.append(controls, note);
       textLayer.appendChild(wrapper);
     }
