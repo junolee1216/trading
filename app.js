@@ -18,6 +18,7 @@ const state = {
   showMa: true,
   showSignals: true,
   activeDrawingTool: "cursor",
+  chartAnnotations: {},
   watchlist: JSON.parse(localStorage.getItem("kr-watchlist") || "[]"),
   collapsedPanels: JSON.parse(localStorage.getItem("kr-collapsed-panels") || "[]")
 };
@@ -33,6 +34,7 @@ const tradingViewSymbol = (code) => `KRX:${String(code).padStart(6, "0")}`;
 const dynamicStockCache = new Map();
 const dynamicStockRequests = new Map();
 let tradingViewRenderId = 0;
+let activeDraftAnnotation = null;
 
 function renderTradingViewChart(entry) {
   const container = $("tradingview-chart");
@@ -78,7 +80,11 @@ function renderTradingViewChart(entry) {
       <div class="chart-drawing-tools" aria-label="보조 도구">
         ${drawingTools.map(([tool, label]) => `<button class="${state.activeDrawingTool === tool ? "active" : ""}" type="button" data-chart-tool="${tool}" aria-label="${chartToolLabel(tool)}">${label}</button>`).join("")}
       </div>
-      <canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>
+      <div class="chart-canvas-shell" id="chart-canvas-shell">
+        <canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>
+        <svg id="chart-annotation-layer" class="chart-annotation-layer" aria-label="차트 주석 레이어"></svg>
+        <div id="chart-text-layer" class="chart-text-layer"></div>
+      </div>
       <aside id="chart-info-panel" class="chart-info-panel"></aside>
     </div>
     <div class="chart-range-bar">
@@ -93,6 +99,8 @@ function renderTradingViewChart(entry) {
       <span id="chart-clock">${now} UTC+9</span>
     </div>`;
   bindChartControls();
+  bindAnnotationLayer();
+  renderChartAnnotations();
 }
 
 function intervalLabel(value) {
@@ -173,6 +181,138 @@ function bindChartControls() {
     link.download = `${state.selectedCode}-chart.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
+  });
+}
+
+function getCurrentAnnotations() {
+  if (!state.chartAnnotations[state.selectedCode]) state.chartAnnotations[state.selectedCode] = [];
+  return state.chartAnnotations[state.selectedCode];
+}
+
+function getLayerPoint(event) {
+  const shell = $("chart-canvas-shell");
+  if (!shell) return { x: 0, y: 0 };
+  const rect = shell.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
+    y: Math.max(0, Math.min(rect.height, event.clientY - rect.top))
+  };
+}
+
+function bindAnnotationLayer() {
+  const shell = $("chart-canvas-shell");
+  if (!shell || shell.dataset.annotationReady) return;
+  shell.dataset.annotationReady = "true";
+
+  shell.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".chart-text-note")) return;
+    const tool = state.activeDrawingTool;
+    if (tool === "cursor") return;
+    event.preventDefault();
+    shell.setPointerCapture(event.pointerId);
+    const point = getLayerPoint(event);
+
+    if (tool === "trend") {
+      activeDraftAnnotation = { type: "line", x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+    } else if (tool === "levels") {
+      getCurrentAnnotations().push({ type: "level", y: point.y });
+      renderChartAnnotations();
+    } else if (tool === "brush") {
+      activeDraftAnnotation = { type: "path", points: [point] };
+    } else if (tool === "text") {
+      const note = { type: "text", x: point.x, y: point.y, text: "" };
+      getCurrentAnnotations().push(note);
+      renderChartAnnotations();
+      requestAnimationFrame(() => {
+        const notes = document.querySelectorAll(".chart-text-note");
+        notes[notes.length - 1]?.focus();
+      });
+    } else if (tool === "pattern" || tool === "smile") {
+      getCurrentAnnotations().push({ type: "marker", tool, x: point.x, y: point.y });
+      renderChartAnnotations();
+    }
+  });
+
+  shell.addEventListener("pointermove", (event) => {
+    if (!activeDraftAnnotation) return;
+    event.preventDefault();
+    const point = getLayerPoint(event);
+    if (activeDraftAnnotation.type === "line") {
+      activeDraftAnnotation.x2 = point.x;
+      activeDraftAnnotation.y2 = point.y;
+    }
+    if (activeDraftAnnotation.type === "path") {
+      activeDraftAnnotation.points.push(point);
+    }
+    renderChartAnnotations(activeDraftAnnotation);
+  });
+
+  shell.addEventListener("pointerup", (event) => {
+    if (!activeDraftAnnotation) return;
+    event.preventDefault();
+    const draft = activeDraftAnnotation;
+    activeDraftAnnotation = null;
+    const annotations = getCurrentAnnotations();
+    if (draft.type === "line" && Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1) > 8) {
+      annotations.push(draft);
+    }
+    if (draft.type === "path" && draft.points.length > 2) {
+      annotations.push(draft);
+    }
+    renderChartAnnotations();
+  });
+
+  shell.addEventListener("pointercancel", () => {
+    activeDraftAnnotation = null;
+    renderChartAnnotations();
+  });
+}
+
+function annotationPath(points) {
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+}
+
+function renderChartAnnotations(draft = null) {
+  const shell = $("chart-canvas-shell");
+  const svg = $("chart-annotation-layer");
+  const textLayer = $("chart-text-layer");
+  if (!shell || !svg || !textLayer) return;
+  const rect = shell.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+  svg.innerHTML = "";
+  textLayer.innerHTML = "";
+
+  const annotations = [...getCurrentAnnotations()];
+  if (draft) annotations.push({ ...draft, draft: true });
+
+  annotations.forEach((annotation, index) => {
+    if (annotation.type === "line") {
+      svg.insertAdjacentHTML("beforeend", `<line class="chart-annotation-line ${annotation.draft ? "draft" : ""}" x1="${annotation.x1}" y1="${annotation.y1}" x2="${annotation.x2}" y2="${annotation.y2}" />`);
+    }
+    if (annotation.type === "level") {
+      svg.insertAdjacentHTML("beforeend", `<line class="chart-annotation-level" x1="0" y1="${annotation.y}" x2="${rect.width}" y2="${annotation.y}" />`);
+    }
+    if (annotation.type === "path") {
+      svg.insertAdjacentHTML("beforeend", `<path class="chart-annotation-path ${annotation.draft ? "draft" : ""}" d="${annotationPath(annotation.points)}" />`);
+    }
+    if (annotation.type === "marker") {
+      const label = annotation.tool === "smile" ? "⌣" : "◇";
+      svg.insertAdjacentHTML("beforeend", `<text class="chart-annotation-marker" x="${annotation.x}" y="${annotation.y}">${label}</text>`);
+    }
+    if (annotation.type === "text") {
+      const note = document.createElement("div");
+      note.className = "chart-text-note";
+      note.contentEditable = "true";
+      note.spellcheck = false;
+      note.textContent = annotation.text;
+      note.style.left = `${annotation.x}px`;
+      note.style.top = `${annotation.y}px`;
+      note.addEventListener("input", () => {
+        const source = getCurrentAnnotations()[index];
+        if (source) source.text = note.textContent || "";
+      });
+      textLayer.appendChild(note);
+    }
   });
 }
 

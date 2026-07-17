@@ -632,10 +632,92 @@ dd {
   box-shadow: inset 0 0 0 1px #c7d6e6;
 }
 
+.chart-canvas-shell {
+  position: relative;
+  min-width: 0;
+  height: 430px;
+  overflow: hidden;
+  background: #ffffff;
+  touch-action: none;
+}
+
 .tradingview-local-chart {
   width: 100%;
   height: 430px;
   display: block;
+}
+
+.chart-annotation-layer,
+.chart-text-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.chart-annotation-layer {
+  pointer-events: none;
+}
+
+.chart-text-layer {
+  pointer-events: none;
+}
+
+.chart-annotation-line,
+.chart-annotation-level,
+.chart-annotation-path {
+  fill: none;
+  stroke: #17212b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-annotation-line.draft,
+.chart-annotation-path.draft {
+  stroke: var(--blue);
+  stroke-dasharray: 6 5;
+}
+
+.chart-annotation-level {
+  stroke: var(--amber);
+  stroke-dasharray: 5 5;
+}
+
+.chart-annotation-marker {
+  fill: var(--amber);
+  font-size: 24px;
+  font-weight: 900;
+  dominant-baseline: middle;
+  text-anchor: middle;
+}
+
+.chart-text-note {
+  position: absolute;
+  min-width: 72px;
+  max-width: 220px;
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px solid #93a4b7;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  box-shadow: 0 6px 18px rgba(25, 42, 58, 0.14);
+  outline: none;
+  pointer-events: auto;
+  transform: translate(-4px, -4px);
+}
+
+.chart-text-note:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(31, 111, 178, 0.16);
+}
+
+.chart-text-note:empty::before {
+  content: "텍스트 입력";
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .chart-info-panel {
