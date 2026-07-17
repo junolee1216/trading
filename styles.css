@@ -695,8 +695,42 @@ dd {
   text-anchor: middle;
 }
 
-.chart-text-note {
+.chart-text-note-wrap {
   position: absolute;
+  pointer-events: auto;
+  transform: translate(-4px, -4px);
+}
+
+.chart-text-controls {
+  display: none;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.chart-text-note-wrap:focus-within .chart-text-controls,
+.chart-text-note-wrap:hover .chart-text-controls {
+  display: flex;
+}
+
+.chart-text-controls button {
+  min-width: 32px;
+  height: 24px;
+  border: 1px solid #93a4b7;
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.chart-text-controls button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.chart-text-note {
   min-width: 72px;
   max-width: 360px;
   min-height: 30px;
@@ -712,7 +746,6 @@ dd {
   outline: none;
   overflow: visible;
   pointer-events: auto;
-  transform: translate(-4px, -4px);
 }
 
 .chart-text-note:focus {

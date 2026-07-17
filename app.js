@@ -416,14 +416,48 @@ function renderChartAnnotations(draft = null) {
       svg.insertAdjacentHTML("beforeend", `<text class="chart-annotation-marker" x="${annotation.x}" y="${annotation.y}">${label}</text>`);
     }
     if (annotation.type === "text") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "chart-text-note-wrap";
+      wrapper.style.left = `${annotation.x}px`;
+      wrapper.style.top = `${annotation.y}px`;
+
+      const controls = document.createElement("div");
+      controls.className = "chart-text-controls";
+      const decrease = document.createElement("button");
+      decrease.type = "button";
+      decrease.textContent = "A-";
+      decrease.setAttribute("aria-label", "글씨 작게");
+      const increase = document.createElement("button");
+      increase.type = "button";
+      increase.textContent = "A+";
+      increase.setAttribute("aria-label", "글씨 크게");
+      controls.append(decrease, increase);
+
       const note = document.createElement("div");
       note.className = "chart-text-note";
       note.contentEditable = "true";
       note.spellcheck = false;
       note.textContent = annotation.text;
-      note.style.left = `${annotation.x}px`;
-      note.style.top = `${annotation.y}px`;
       note.style.fontSize = `${annotation.fontSize || 13}px`;
+
+      const updateFontSize = (delta) => {
+        const source = getCurrentAnnotations()[index];
+        if (!source) return;
+        const currentSize = source.fontSize || 13;
+        source.fontSize = Math.max(10, Math.min(40, currentSize + delta));
+        note.style.fontSize = `${source.fontSize}px`;
+      };
+
+      decrease.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        updateFontSize(-1);
+      });
+      increase.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        updateFontSize(1);
+      });
       note.addEventListener("input", () => {
         const source = getCurrentAnnotations()[index];
         if (source) source.text = note.textContent || "";
@@ -431,13 +465,10 @@ function renderChartAnnotations(draft = null) {
       note.addEventListener("wheel", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        const source = getCurrentAnnotations()[index];
-        if (!source) return;
-        const currentSize = source.fontSize || 13;
-        source.fontSize = Math.max(10, Math.min(32, currentSize + (event.deltaY < 0 ? 1 : -1)));
-        note.style.fontSize = `${source.fontSize}px`;
+        updateFontSize(event.deltaY < 0 ? 1 : -1);
       }, { passive: false });
-      textLayer.appendChild(note);
+      wrapper.append(controls, note);
+      textLayer.appendChild(wrapper);
     }
   });
 }
