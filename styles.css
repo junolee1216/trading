@@ -635,9 +635,7 @@ dd {
   font-weight: 700;
 }
 
-.tradingview-widget-slot,
-.tradingview-widget-container,
-.tradingview-widget-container__widget {
+.tradingview-local-chart {
   width: 100%;
   height: calc(100% - 34px);
   display: block;

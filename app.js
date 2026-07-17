@@ -34,40 +34,13 @@ function renderTradingViewChart(entry) {
   const renderId = tradingViewRenderId + 1;
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
-  const widgetId = `tradingview-widget-${renderId}`;
 
   const chartInput = $("chart-stock-search");
   const chartSymbol = $("chart-selected-symbol");
   if (chartInput && document.activeElement !== chartInput) chartInput.value = `${entry.name || entry.code} (${entry.code})`;
   if (chartSymbol) chartSymbol.textContent = symbol;
 
-  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div id="${widgetId}" class="tradingview-widget-slot"></div>`;
-
-  const widgetSlot = document.getElementById(widgetId);
-  if (!widgetSlot) return;
-
-  const widgetScript = document.createElement("script");
-  widgetScript.type = "text/javascript";
-  widgetScript.async = true;
-  widgetScript.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-  widgetScript.text = JSON.stringify({
-    autosize: true,
-    symbol,
-    interval: "D",
-    timezone: "Asia/Seoul",
-    theme: "light",
-    style: "1",
-    locale: "kr",
-    allow_symbol_change: false,
-    calendar: false,
-    support_host: "https://www.tradingview.com",
-    details: true,
-    hotlist: false,
-    withdateranges: true,
-    hide_side_toolbar: false,
-    save_image: true
-  });
-  widgetSlot.appendChild(widgetScript);
+  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>`;
 }
 
 function searchPriority(stock, normalizedKeyword) {
@@ -430,17 +403,18 @@ function renderWatchlist() {
   }).join("");
 }
 
-function drawChart(stock, analysis) {
-  const canvas = $("price-chart");
+function drawChart(stock, analysis, canvasId = "price-chart") {
+  const canvas = $(canvasId);
+  if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
-  canvas.width = rect.width * ratio;
-  canvas.height = 460 * ratio;
+  const height = canvasId === "tradingview-local-chart" ? 486 : 460;
+  canvas.width = Math.max(rect.width, 320) * ratio;
+  canvas.height = height * ratio;
   const ctx = canvas.getContext("2d");
   ctx.scale(ratio, ratio);
 
-  const width = rect.width;
-  const height = 460;
+  const width = Math.max(rect.width, 320);
   const pad = { left: 56, right: 22, top: 26, bottom: 92 };
   const prices = stock.prices;
   const volumes = stock.volumes;
@@ -537,16 +511,17 @@ function drawChart(stock, analysis) {
   ctx.fillText(analysis.signal, x(signalIndex) + 10, y(prices[signalIndex]) - 10);
 }
 
-function drawUnavailableChart(entry) {
-  const canvas = $("price-chart");
+function drawUnavailableChart(entry, canvasId = "price-chart") {
+  const canvas = $(canvasId);
+  if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
-  canvas.width = rect.width * ratio;
-  canvas.height = 460 * ratio;
+  const height = canvasId === "tradingview-local-chart" ? 486 : 460;
+  canvas.width = Math.max(rect.width, 320) * ratio;
+  canvas.height = height * ratio;
   const ctx = canvas.getContext("2d");
   ctx.scale(ratio, ratio);
-  const width = rect.width;
-  const height = 460;
+  const width = Math.max(rect.width, 320);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
@@ -641,6 +616,7 @@ function renderUnavailable(entry) {
   ].map((risk) => `<li>${risk}</li>`).join("");
   $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>확장 기능에서 제공</span></div>`).join("");
   renderTradingViewChart(entry);
+  drawUnavailableChart(entry, "tradingview-local-chart");
   drawUnavailableChart(entry);
   requestAnimationFrame(layoutAnalysisMasonry);
 
@@ -658,6 +634,7 @@ function renderDetailedStock(stock) {
   renderAnalysis(stock, analysis);
   renderWatchlist();
   renderTradingViewChart(stock);
+  drawChart(stock, analysis, "tradingview-local-chart");
   drawChart(stock, analysis);
   setupCollapsiblePanels();
   requestAnimationFrame(layoutAnalysisMasonry);
