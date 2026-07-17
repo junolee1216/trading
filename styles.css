@@ -781,16 +781,21 @@ dd {
   background: #ffffff;
 }
 
-.chart-range-bar button {
-  min-height: 28px;
-  padding: 0 8px;
+.chart-visible-range,
+#chart-clock,
+.chart-zoom-hint {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 #chart-clock {
   margin-left: auto;
+}
+
+.chart-zoom-hint {
   color: var(--ink);
-  font-size: 13px;
-  font-weight: 800;
+  opacity: 0.72;
 }
 
 .tradingview-loading {

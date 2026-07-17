@@ -19,6 +19,8 @@ const state = {
   showSignals: true,
   activeDrawingTool: "cursor",
   chartAnnotations: {},
+  chartRedoStack: {},
+  currentChartLength: 60,
   watchlist: JSON.parse(localStorage.getItem("kr-watchlist") || "[]"),
   collapsedPanels: JSON.parse(localStorage.getItem("kr-collapsed-panels") || "[]")
 };
@@ -51,14 +53,11 @@ function renderTradingViewChart(entry) {
     ["D", "일"]
   ];
   const drawingTools = [
-    ["cursor", "+"],
-    ["trend", "/"],
-    ["levels", "="],
-    ["pattern", "◇"],
+    ["cursor", "↖"],
     ["brush", "⌁"],
     ["text", "T"],
-    ["smile", "⌣"],
-    ["zoom", "⌕"]
+    ["undo", "↶"],
+    ["redo", "↷"]
   ];
 
   container.innerHTML = `
@@ -88,15 +87,9 @@ function renderTradingViewChart(entry) {
       <aside id="chart-info-panel" class="chart-info-panel"></aside>
     </div>
     <div class="chart-range-bar">
-      ${[
-        ["20", "1D"],
-        ["30", "5D"],
-        ["40", "1M"],
-        ["50", "3M"],
-        ["60", "6M"],
-        ["all", "전체"]
-      ].map(([range, label]) => `<button class="${state.chartRange === range ? "active" : ""}" type="button" data-chart-range="${range}">${label}</button>`).join("")}
+      <span class="chart-visible-range">표시 구간: ${chartRangeLabel()}</span>
       <span id="chart-clock">${now} UTC+9</span>
+      <span class="chart-zoom-hint">차트 위에서 휠: 확대/축소</span>
     </div>`;
   bindChartControls();
   bindAnnotationLayer();
@@ -114,14 +107,11 @@ function intervalLabel(value) {
 
 function chartToolLabel(value) {
   return {
-    cursor: "기본 선택",
-    trend: "추세선",
-    levels: "가격 레벨",
-    pattern: "패턴 표시",
-    brush: "메모 선",
-    text: "텍스트 메모",
-    smile: "관심 표시",
-    zoom: "최근 구간 확대"
+    cursor: "일반 마우스",
+    brush: "자유 그리기",
+    text: "텍스트박스",
+    undo: "되돌리기",
+    redo: "다시하기"
   }[value] || "보조 도구";
 }
 
@@ -131,6 +121,10 @@ function chartStyleLabel(value) {
 
 function currentChartModeText() {
   return `${intervalLabel(state.chartInterval)} · ${chartStyleLabel(state.chartStyle)} · ${chartToolLabel(state.activeDrawingTool)}`;
+}
+
+function chartRangeLabel() {
+  return state.chartRange === "all" ? "전체" : `${state.chartRange}일`;
 }
 
 function intervalDefaultRange(value) {
@@ -161,16 +155,18 @@ function bindChartControls() {
       render();
     });
   });
-  document.querySelectorAll("[data-chart-range]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.chartRange = button.dataset.chartRange;
-      render();
-    });
-  });
   document.querySelectorAll("[data-chart-tool]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeDrawingTool = button.dataset.chartTool;
-      if (state.activeDrawingTool === "zoom") state.chartRange = "30";
+      const tool = button.dataset.chartTool;
+      if (tool === "undo") {
+        undoChartAnnotation();
+        return;
+      }
+      if (tool === "redo") {
+        redoChartAnnotation();
+        return;
+      }
+      state.activeDrawingTool = tool;
       render();
     });
   });
@@ -189,6 +185,38 @@ function getCurrentAnnotations() {
   return state.chartAnnotations[state.selectedCode];
 }
 
+function getCurrentRedoStack() {
+  if (!state.chartRedoStack[state.selectedCode]) state.chartRedoStack[state.selectedCode] = [];
+  return state.chartRedoStack[state.selectedCode];
+}
+
+function addChartAnnotation(annotation) {
+  getCurrentAnnotations().push(annotation);
+  state.chartRedoStack[state.selectedCode] = [];
+}
+
+function undoChartAnnotation() {
+  const annotations = getCurrentAnnotations();
+  const removed = annotations.pop();
+  if (removed) getCurrentRedoStack().push(removed);
+  renderChartAnnotations();
+}
+
+function redoChartAnnotation() {
+  const restored = getCurrentRedoStack().pop();
+  if (restored) getCurrentAnnotations().push(restored);
+  renderChartAnnotations();
+}
+
+function updateDrawingToolUi() {
+  document.querySelectorAll("[data-chart-tool]").forEach((button) => {
+    const tool = button.dataset.chartTool;
+    button.classList.toggle("active", tool === state.activeDrawingTool && tool !== "undo" && tool !== "redo");
+  });
+  const status = document.querySelector(".chart-mode-status");
+  if (status) status.textContent = currentChartModeText();
+}
+
 function getLayerPoint(event) {
   const shell = $("chart-canvas-shell");
   if (!shell) return { x: 0, y: 0 };
@@ -204,6 +232,11 @@ function bindAnnotationLayer() {
   if (!shell || shell.dataset.annotationReady) return;
   shell.dataset.annotationReady = "true";
 
+  shell.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    zoomChartByWheel(event.deltaY);
+  }, { passive: false });
+
   shell.addEventListener("pointerdown", (event) => {
     if (event.target.closest(".chart-text-note")) return;
     const tool = state.activeDrawingTool;
@@ -212,24 +245,18 @@ function bindAnnotationLayer() {
     shell.setPointerCapture(event.pointerId);
     const point = getLayerPoint(event);
 
-    if (tool === "trend") {
-      activeDraftAnnotation = { type: "line", x1: point.x, y1: point.y, x2: point.x, y2: point.y };
-    } else if (tool === "levels") {
-      getCurrentAnnotations().push({ type: "level", y: point.y });
-      renderChartAnnotations();
-    } else if (tool === "brush") {
+    if (tool === "brush") {
       activeDraftAnnotation = { type: "path", points: [point] };
     } else if (tool === "text") {
       const note = { type: "text", x: point.x, y: point.y, text: "" };
-      getCurrentAnnotations().push(note);
+      addChartAnnotation(note);
       renderChartAnnotations();
+      state.activeDrawingTool = "cursor";
+      updateDrawingToolUi();
       requestAnimationFrame(() => {
         const notes = document.querySelectorAll(".chart-text-note");
         notes[notes.length - 1]?.focus();
       });
-    } else if (tool === "pattern" || tool === "smile") {
-      getCurrentAnnotations().push({ type: "marker", tool, x: point.x, y: point.y });
-      renderChartAnnotations();
     }
   });
 
@@ -237,10 +264,6 @@ function bindAnnotationLayer() {
     if (!activeDraftAnnotation) return;
     event.preventDefault();
     const point = getLayerPoint(event);
-    if (activeDraftAnnotation.type === "line") {
-      activeDraftAnnotation.x2 = point.x;
-      activeDraftAnnotation.y2 = point.y;
-    }
     if (activeDraftAnnotation.type === "path") {
       activeDraftAnnotation.points.push(point);
     }
@@ -252,12 +275,8 @@ function bindAnnotationLayer() {
     event.preventDefault();
     const draft = activeDraftAnnotation;
     activeDraftAnnotation = null;
-    const annotations = getCurrentAnnotations();
-    if (draft.type === "line" && Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1) > 8) {
-      annotations.push(draft);
-    }
     if (draft.type === "path" && draft.points.length > 2) {
-      annotations.push(draft);
+      addChartAnnotation(draft);
     }
     renderChartAnnotations();
   });
@@ -266,6 +285,14 @@ function bindAnnotationLayer() {
     activeDraftAnnotation = null;
     renderChartAnnotations();
   });
+}
+
+function zoomChartByWheel(deltaY) {
+  const total = state.currentChartLength || 60;
+  const current = state.chartRange === "all" ? total : Number(state.chartRange) || total;
+  const next = deltaY < 0 ? Math.max(12, Math.round(current * 0.8)) : Math.min(total, Math.round(current * 1.25));
+  state.chartRange = next >= total ? "all" : String(next);
+  render();
 }
 
 function annotationPath(points) {
@@ -665,6 +692,7 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
 
   const width = Math.max(rect.width, 320);
   const pad = { left: 56, right: 22, top: 26, bottom: 92 };
+  state.currentChartLength = stock.prices.length;
   const rangeCount = state.chartRange === "all" ? stock.prices.length : Number(state.chartRange);
   const startIndex = Math.max(0, stock.prices.length - rangeCount);
   const prices = stock.prices.slice(startIndex);
@@ -779,98 +807,7 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     ctx.fillText(analysis.signal, x(signalIndex) + 10, y(prices[signalIndex]) - 10);
   }
 
-  drawActiveToolOverlay(ctx, { width, height, pad, chartHeight, prices, x, y });
-
   if (canvasId === "tradingview-local-chart") renderChartInfo(stock, analysis, prices);
-}
-
-function drawActiveToolOverlay(ctx, chart) {
-  const { width, pad, chartHeight, prices, x, y } = chart;
-  const tool = state.activeDrawingTool;
-  if (!tool || tool === "cursor" || !prices.length) return;
-
-  ctx.save();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = "#334155";
-  ctx.fillStyle = "#334155";
-  ctx.font = "700 12px Segoe UI";
-
-  if (tool === "trend") {
-    ctx.setLineDash([8, 5]);
-    ctx.beginPath();
-    ctx.moveTo(x(1), y(prices[1] || prices[0]));
-    ctx.lineTo(x(prices.length - 2), y(prices[prices.length - 2] || prices[prices.length - 1]));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillText("추세선", x(1) + 8, y(prices[1] || prices[0]) - 8);
-  }
-
-  if (tool === "levels") {
-    [0.25, 0.5, 0.75].forEach((ratio) => {
-      const gy = pad.top + chartHeight * ratio;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(pad.left, gy);
-      ctx.lineTo(width - pad.right, gy);
-      ctx.stroke();
-    });
-    ctx.setLineDash([]);
-    ctx.fillText("레벨", pad.left + 8, pad.top + 18);
-  }
-
-  if (tool === "pattern") {
-    const index = Math.max(0, prices.length - 4);
-    const cx = x(index);
-    const cy = y(prices[index]) - 24;
-    ctx.strokeStyle = "#a86b00";
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 10);
-    ctx.lineTo(cx + 10, cy);
-    ctx.lineTo(cx, cy + 10);
-    ctx.lineTo(cx - 10, cy);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.fillText("패턴", cx + 14, cy + 4);
-  }
-
-  if (tool === "brush") {
-    ctx.strokeStyle = "#1f6fb2";
-    ctx.beginPath();
-    ctx.moveTo(pad.left + 18, pad.top + chartHeight * 0.72);
-    ctx.bezierCurveTo(width * 0.35, pad.top + chartHeight * 0.56, width * 0.52, pad.top + chartHeight * 0.86, width - pad.right - 28, pad.top + chartHeight * 0.62);
-    ctx.stroke();
-  }
-
-  if (tool === "text") {
-    ctx.fillStyle = "#17212b";
-    ctx.fillText("메모", pad.left + 18, pad.top + 28);
-  }
-
-  if (tool === "smile") {
-    const cx = x(prices.length - 1);
-    const cy = y(prices[prices.length - 1]) - 26;
-    ctx.strokeStyle = "#12805c";
-    ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx - 4, cy - 3, 1.5, 0, Math.PI * 2);
-    ctx.arc(cx + 4, cy - 3, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx, cy + 2, 5, 0, Math.PI);
-    ctx.stroke();
-  }
-
-  if (tool === "zoom") {
-    ctx.strokeStyle = "#1f6fb2";
-    ctx.setLineDash([5, 4]);
-    ctx.strokeRect(width - pad.right - 130, pad.top + 12, 108, chartHeight - 24);
-    ctx.setLineDash([]);
-    ctx.fillText("최근 구간", width - pad.right - 122, pad.top + 30);
-  }
-
-  ctx.restore();
 }
 
 function renderChartInfo(stock, analysis, visiblePrices) {
