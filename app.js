@@ -146,6 +146,10 @@ function chartRangeLabel() {
   return state.chartRange === "all" ? "전체" : `${state.chartRange}일`;
 }
 
+function isFullyZoomedOut() {
+  return state.chartRange === "all";
+}
+
 function intervalDefaultRange(value) {
   if (value === "1") return "20";
   if (value === "30") return "30";
@@ -392,6 +396,7 @@ function renderChartAnnotations(draft = null) {
   svg.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
   svg.innerHTML = "";
   textLayer.innerHTML = "";
+  if (!isFullyZoomedOut()) return;
 
   const annotations = [...getCurrentAnnotations()];
   if (draft) annotations.push({ ...draft, draft: true });
@@ -418,8 +423,6 @@ function renderChartAnnotations(draft = null) {
       note.textContent = annotation.text;
       note.style.left = `${annotation.x}px`;
       note.style.top = `${annotation.y}px`;
-      if (annotation.width) note.style.width = `${annotation.width}px`;
-      if (annotation.height) note.style.height = `${annotation.height}px`;
       note.style.fontSize = `${annotation.fontSize || 13}px`;
       note.addEventListener("input", () => {
         const source = getCurrentAnnotations()[index];
@@ -434,13 +437,6 @@ function renderChartAnnotations(draft = null) {
         source.fontSize = Math.max(10, Math.min(32, currentSize + (event.deltaY < 0 ? 1 : -1)));
         note.style.fontSize = `${source.fontSize}px`;
       }, { passive: false });
-      const resizeObserver = new ResizeObserver(([entry]) => {
-        const source = getCurrentAnnotations()[index];
-        if (!source) return;
-        source.width = Math.round(entry.contentRect.width);
-        source.height = Math.round(entry.contentRect.height);
-      });
-      resizeObserver.observe(note);
       textLayer.appendChild(note);
     }
   });
@@ -827,14 +823,16 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     ctx.stroke();
   }
 
-  ctx.fillStyle = "#657384";
-  ctx.font = "12px Segoe UI";
-  [maxPrice, (maxPrice + minPrice) / 2, minPrice].forEach((price) => {
-    ctx.fillText(Math.round(price).toLocaleString(), 6, y(price) + 4);
-  });
-  ctx.fillStyle = "#17212b";
-  ctx.font = "700 13px Segoe UI";
-  ctx.fillText(currentChartModeText(), pad.left, 18);
+  if (isFullyZoomedOut()) {
+    ctx.fillStyle = "#657384";
+    ctx.font = "12px Segoe UI";
+    [maxPrice, (maxPrice + minPrice) / 2, minPrice].forEach((price) => {
+      ctx.fillText(Math.round(price).toLocaleString(), 6, y(price) + 4);
+    });
+    ctx.fillStyle = "#17212b";
+    ctx.font = "700 13px Segoe UI";
+    ctx.fillText(currentChartModeText(), pad.left, 18);
+  }
 
   const maxVolume = Math.max(...volumes);
   volumes.forEach((volume, index) => {
@@ -886,24 +884,26 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     ctx.stroke();
   }
 
-  const support = Math.min(...prices.slice(-12));
-  const resistance = Math.max(...prices.slice(-12));
-  [
-    ["지지선", support, "#1f6fb2"],
-    ["저항선", resistance, "#a86b00"]
-  ].forEach(([label, price, color]) => {
-    ctx.strokeStyle = color;
-    ctx.setLineDash([5, 4]);
-    ctx.beginPath();
-    ctx.moveTo(pad.left, y(price));
-    ctx.lineTo(width - pad.right, y(price));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = color;
-    ctx.fillText(label, width - pad.right - 42, y(price) - 6);
-  });
+  if (isFullyZoomedOut()) {
+    const support = Math.min(...prices.slice(-12));
+    const resistance = Math.max(...prices.slice(-12));
+    [
+      ["지지선", support, "#1f6fb2"],
+      ["저항선", resistance, "#a86b00"]
+    ].forEach(([label, price, color]) => {
+      ctx.strokeStyle = color;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y(price));
+      ctx.lineTo(width - pad.right, y(price));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.fillText(label, width - pad.right - 42, y(price) - 6);
+    });
+  }
 
-  if (state.showSignals && prices.length >= 5) {
+  if (isFullyZoomedOut() && state.showSignals && prices.length >= 5) {
     const signalIndex = prices.length - 5;
     ctx.fillStyle = analysis.tone === "buy" ? "#12805c" : analysis.tone === "sell" ? "#1f6fb2" : "#a86b00";
     ctx.beginPath();
