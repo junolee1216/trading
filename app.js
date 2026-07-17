@@ -14,6 +14,7 @@ const state = {
   mode: "balanced",
   chartInterval: "D",
   chartRange: "all",
+  chartOffset: 0,
   chartStyle: "candle",
   showMa: true,
   showSignals: true,
@@ -37,6 +38,8 @@ const dynamicStockCache = new Map();
 const dynamicStockRequests = new Map();
 let tradingViewRenderId = 0;
 let activeDraftAnnotation = null;
+let activePan = null;
+let chartClockTimer = null;
 
 function renderTradingViewChart(entry) {
   const container = $("tradingview-chart");
@@ -45,7 +48,7 @@ function renderTradingViewChart(entry) {
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
 
-  const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const now = currentSeoulTime();
   const intervalButtons = [
     ["1", "1분"],
     ["30", "30분"],
@@ -94,6 +97,22 @@ function renderTradingViewChart(entry) {
   bindChartControls();
   bindAnnotationLayer();
   renderChartAnnotations();
+  startChartClock();
+}
+
+function currentSeoulTime() {
+  return new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function updateChartClock() {
+  const clock = $("chart-clock");
+  if (clock) clock.textContent = `${currentSeoulTime()} UTC+9`;
+}
+
+function startChartClock() {
+  updateChartClock();
+  if (chartClockTimer) return;
+  chartClockTimer = window.setInterval(updateChartClock, 1000);
 }
 
 function intervalLabel(value) {
@@ -134,11 +153,28 @@ function intervalDefaultRange(value) {
   return "all";
 }
 
+function chartRangeCount(total = state.currentChartLength || 60) {
+  return state.chartRange === "all" ? total : Math.min(total, Number(state.chartRange) || total);
+}
+
+function clampChartOffset(offset = state.chartOffset, total = state.currentChartLength || 60, range = chartRangeCount(total)) {
+  if (range >= total) return 0;
+  return Math.max(0, Math.min(total - range, Math.round(offset)));
+}
+
+function setChartRangeAndOffset(range, offset = state.chartOffset) {
+  const total = state.currentChartLength || 60;
+  const nextRange = range >= total ? total : Math.max(12, Math.min(total, Math.round(range)));
+  state.chartRange = nextRange >= total ? "all" : String(nextRange);
+  state.chartOffset = clampChartOffset(offset, total, nextRange);
+}
+
 function bindChartControls() {
   document.querySelectorAll("[data-chart-interval]").forEach((button) => {
     button.addEventListener("click", () => {
       state.chartInterval = button.dataset.chartInterval;
       state.chartRange = intervalDefaultRange(state.chartInterval);
+      state.chartOffset = 0;
       render();
     });
   });
@@ -217,6 +253,20 @@ function updateDrawingToolUi() {
   if (status) status.textContent = currentChartModeText();
 }
 
+function getCurrentRenderableStock() {
+  return data.stocks.find((item) => item.code === state.selectedCode) || dynamicStockCache.get(state.selectedCode) || getStock();
+}
+
+function refreshChartOnly() {
+  const stock = getCurrentRenderableStock();
+  if (!stock?.prices?.length) return;
+  const analysis = engine.analyze(stock, data.market, state.mode);
+  drawChart(stock, analysis, "tradingview-local-chart");
+  const range = document.querySelector(".chart-visible-range");
+  if (range) range.textContent = `표시 구간: ${chartRangeLabel()}`;
+  renderChartAnnotations();
+}
+
 function getLayerPoint(event) {
   const shell = $("chart-canvas-shell");
   if (!shell) return { x: 0, y: 0 };
@@ -240,10 +290,22 @@ function bindAnnotationLayer() {
   shell.addEventListener("pointerdown", (event) => {
     if (event.target.closest(".chart-text-note")) return;
     const tool = state.activeDrawingTool;
-    if (tool === "cursor") return;
+    const point = getLayerPoint(event);
+    if (tool === "cursor") {
+      if (state.chartRange === "all") return;
+      event.preventDefault();
+      shell.setPointerCapture(event.pointerId);
+      activePan = {
+        pointerId: event.pointerId,
+        startX: point.x,
+        startOffset: state.chartOffset,
+        range: chartRangeCount()
+      };
+      shell.classList.add("is-panning");
+      return;
+    }
     event.preventDefault();
     shell.setPointerCapture(event.pointerId);
-    const point = getLayerPoint(event);
 
     if (tool === "brush") {
       activeDraftAnnotation = { type: "path", points: [point] };
@@ -261,6 +323,16 @@ function bindAnnotationLayer() {
   });
 
   shell.addEventListener("pointermove", (event) => {
+    if (activePan) {
+      event.preventDefault();
+      const point = getLayerPoint(event);
+      const rect = shell.getBoundingClientRect();
+      const usableWidth = Math.max(1, rect.width - 78);
+      const barsMoved = (point.x - activePan.startX) / usableWidth * activePan.range;
+      state.chartOffset = clampChartOffset(activePan.startOffset + barsMoved);
+      refreshChartOnly();
+      return;
+    }
     if (!activeDraftAnnotation) return;
     event.preventDefault();
     const point = getLayerPoint(event);
@@ -271,6 +343,12 @@ function bindAnnotationLayer() {
   });
 
   shell.addEventListener("pointerup", (event) => {
+    if (activePan) {
+      event.preventDefault();
+      activePan = null;
+      shell.classList.remove("is-panning");
+      return;
+    }
     if (!activeDraftAnnotation) return;
     event.preventDefault();
     const draft = activeDraftAnnotation;
@@ -282,6 +360,8 @@ function bindAnnotationLayer() {
   });
 
   shell.addEventListener("pointercancel", () => {
+    activePan = null;
+    shell.classList.remove("is-panning");
     activeDraftAnnotation = null;
     renderChartAnnotations();
   });
@@ -290,9 +370,13 @@ function bindAnnotationLayer() {
 function zoomChartByWheel(deltaY) {
   const total = state.currentChartLength || 60;
   const current = state.chartRange === "all" ? total : Number(state.chartRange) || total;
+  const start = Math.max(0, total - current - state.chartOffset);
+  const center = start + current / 2;
   const next = deltaY < 0 ? Math.max(12, Math.round(current * 0.8)) : Math.min(total, Math.round(current * 1.25));
-  state.chartRange = next >= total ? "all" : String(next);
-  render();
+  const nextStart = center - next / 2;
+  const nextOffset = total - next - nextStart;
+  setChartRangeAndOffset(next, nextOffset);
+  refreshChartOnly();
 }
 
 function annotationPath(points) {
@@ -334,10 +418,29 @@ function renderChartAnnotations(draft = null) {
       note.textContent = annotation.text;
       note.style.left = `${annotation.x}px`;
       note.style.top = `${annotation.y}px`;
+      if (annotation.width) note.style.width = `${annotation.width}px`;
+      if (annotation.height) note.style.height = `${annotation.height}px`;
+      note.style.fontSize = `${annotation.fontSize || 13}px`;
       note.addEventListener("input", () => {
         const source = getCurrentAnnotations()[index];
         if (source) source.text = note.textContent || "";
       });
+      note.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const source = getCurrentAnnotations()[index];
+        if (!source) return;
+        const currentSize = source.fontSize || 13;
+        source.fontSize = Math.max(10, Math.min(32, currentSize + (event.deltaY < 0 ? 1 : -1)));
+        note.style.fontSize = `${source.fontSize}px`;
+      }, { passive: false });
+      const resizeObserver = new ResizeObserver(([entry]) => {
+        const source = getCurrentAnnotations()[index];
+        if (!source) return;
+        source.width = Math.round(entry.contentRect.width);
+        source.height = Math.round(entry.contentRect.height);
+      });
+      resizeObserver.observe(note);
       textLayer.appendChild(note);
     }
   });
@@ -693,10 +796,12 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
   const width = Math.max(rect.width, 320);
   const pad = { left: 56, right: 22, top: 26, bottom: 92 };
   state.currentChartLength = stock.prices.length;
-  const rangeCount = state.chartRange === "all" ? stock.prices.length : Number(state.chartRange);
-  const startIndex = Math.max(0, stock.prices.length - rangeCount);
-  const prices = stock.prices.slice(startIndex);
-  const volumes = stock.volumes.slice(startIndex);
+  const rangeCount = chartRangeCount(stock.prices.length);
+  state.chartOffset = clampChartOffset(state.chartOffset, stock.prices.length, rangeCount);
+  const startIndex = Math.max(0, stock.prices.length - rangeCount - state.chartOffset);
+  const endIndex = Math.min(stock.prices.length, startIndex + rangeCount);
+  const prices = stock.prices.slice(startIndex, endIndex);
+  const volumes = stock.volumes.slice(startIndex, endIndex);
   const highs = prices.map((price, index) => price * (1 + (volumes[index] % 5) / 100));
   const lows = prices.map((price, index) => price * (1 - ((volumes[index] % 4) + 1) / 100));
   const allPrices = [...highs, ...lows, analysis.sections.technical.indicators.ma20, stock.weekHigh, stock.weekLow];
