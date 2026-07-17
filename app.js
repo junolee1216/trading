@@ -12,6 +12,10 @@ const stockSearchRank = window.KR_STOCK_SEARCH_RANK || {};
 const state = {
   selectedCode: data.stocks[0].code,
   mode: "balanced",
+  chartRange: "all",
+  chartStyle: "candle",
+  showMa: true,
+  showSignals: true,
   watchlist: JSON.parse(localStorage.getItem("kr-watchlist") || "[]"),
   collapsedPanels: JSON.parse(localStorage.getItem("kr-collapsed-panels") || "[]")
 };
@@ -39,8 +43,69 @@ function renderTradingViewChart(entry) {
   const chartSymbol = $("chart-selected-symbol");
   if (chartInput && document.activeElement !== chartInput) chartInput.value = `${entry.name || entry.code} (${entry.code})`;
   if (chartSymbol) chartSymbol.textContent = symbol;
+  const now = new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>`;
+  container.innerHTML = `
+    <div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div>
+    <div class="chart-toolbar" aria-label="차트 도구">
+      ${["1분", "30분", "1시간", "일"].map((label) => `<button class="chart-tool" type="button" data-chart-interval="${label}">${label}</button>`).join("")}
+      <span class="chart-divider"></span>
+      <button class="chart-tool ${state.chartStyle === "candle" ? "active" : ""}" type="button" data-chart-style="candle">캔들</button>
+      <button class="chart-tool ${state.chartStyle === "line" ? "active" : ""}" type="button" data-chart-style="line">라인</button>
+      <span class="chart-divider"></span>
+      <button class="chart-tool ${state.showMa ? "active" : ""}" type="button" data-chart-toggle="ma">20일선</button>
+      <button class="chart-tool ${state.showSignals ? "active" : ""}" type="button" data-chart-toggle="signals">신호</button>
+      <button class="chart-tool" type="button" data-chart-action="snapshot">저장</button>
+    </div>
+    <div class="chart-workspace">
+      <div class="chart-drawing-tools" aria-label="보조 도구">
+        ${["+", "/", "=", "◇", "⌁", "T", "⌣", "⌕"].map((label) => `<button type="button" tabindex="-1">${label}</button>`).join("")}
+      </div>
+      <canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>
+      <aside id="chart-info-panel" class="chart-info-panel"></aside>
+    </div>
+    <div class="chart-range-bar">
+      ${[
+        ["20", "1D"],
+        ["30", "5D"],
+        ["40", "1M"],
+        ["50", "3M"],
+        ["60", "6M"],
+        ["all", "전체"]
+      ].map(([range, label]) => `<button class="${state.chartRange === range ? "active" : ""}" type="button" data-chart-range="${range}">${label}</button>`).join("")}
+      <span id="chart-clock">${now} UTC+9</span>
+    </div>`;
+  bindChartControls();
+}
+
+function bindChartControls() {
+  document.querySelectorAll("[data-chart-style]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.chartStyle = button.dataset.chartStyle;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-chart-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.chartToggle === "ma") state.showMa = !state.showMa;
+      if (button.dataset.chartToggle === "signals") state.showSignals = !state.showSignals;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.chartRange = button.dataset.chartRange;
+      render();
+    });
+  });
+  document.querySelector("[data-chart-action='snapshot']")?.addEventListener("click", () => {
+    const canvas = $("tradingview-local-chart");
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `${state.selectedCode}-chart.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  });
 }
 
 function searchPriority(stock, normalizedKeyword) {
@@ -408,7 +473,7 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
   if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
-  const height = canvasId === "tradingview-local-chart" ? 486 : 460;
+  const height = canvasId === "tradingview-local-chart" ? 430 : 460;
   canvas.width = Math.max(rect.width, 320) * ratio;
   canvas.height = height * ratio;
   const ctx = canvas.getContext("2d");
@@ -416,8 +481,10 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
 
   const width = Math.max(rect.width, 320);
   const pad = { left: 56, right: 22, top: 26, bottom: 92 };
-  const prices = stock.prices;
-  const volumes = stock.volumes;
+  const rangeCount = state.chartRange === "all" ? stock.prices.length : Number(state.chartRange);
+  const startIndex = Math.max(0, stock.prices.length - rangeCount);
+  const prices = stock.prices.slice(startIndex);
+  const volumes = stock.volumes.slice(startIndex);
   const highs = prices.map((price, index) => price * (1 + (volumes[index] % 5) / 100));
   const lows = prices.map((price, index) => price * (1 - ((volumes[index] % 4) + 1) / 100));
   const allPrices = [...highs, ...lows, analysis.sections.technical.indicators.ma20, stock.weekHigh, stock.weekLow];
@@ -456,35 +523,48 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     ctx.fillRect(x(index) - step * 0.28, volumeTop + volumeHeight - barHeight, step * 0.55, barHeight);
   });
 
-  prices.forEach((close, index) => {
-    const open = prices[index - 1] || close * 0.995;
-    const high = highs[index];
-    const low = lows[index];
-    const up = close >= open;
-    const cx = x(index);
-    ctx.strokeStyle = up ? "#c83e4d" : "#1f6fb2";
-    ctx.fillStyle = ctx.strokeStyle;
+  if (state.chartStyle === "line") {
+    ctx.strokeStyle = "#1f6fb2";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(cx, y(high));
-    ctx.lineTo(cx, y(low));
+    prices.forEach((close, index) => {
+      if (index === 0) ctx.moveTo(x(index), y(close));
+      else ctx.lineTo(x(index), y(close));
+    });
     ctx.stroke();
-    const bodyTop = Math.min(y(open), y(close));
-    const bodyHeight = Math.max(3, Math.abs(y(open) - y(close)));
-    ctx.fillRect(cx - step * 0.25, bodyTop, step * 0.5, bodyHeight);
-  });
+  } else {
+    prices.forEach((close, index) => {
+      const open = prices[index - 1] || close * 0.995;
+      const high = highs[index];
+      const low = lows[index];
+      const up = close >= open;
+      const cx = x(index);
+      ctx.strokeStyle = up ? "#c83e4d" : "#1f6fb2";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(cx, y(high));
+      ctx.lineTo(cx, y(low));
+      ctx.stroke();
+      const bodyTop = Math.min(y(open), y(close));
+      const bodyHeight = Math.max(3, Math.abs(y(open) - y(close)));
+      ctx.fillRect(cx - step * 0.25, bodyTop, Math.max(2, step * 0.5), bodyHeight);
+    });
+  }
 
   const ma20Series = prices.map((_, index) => {
     const sample = prices.slice(Math.max(0, index - 19), index + 1);
     return sample.reduce((sum, value) => sum + value, 0) / sample.length;
   });
-  ctx.strokeStyle = "#12805c";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ma20Series.forEach((value, index) => {
-    if (index === 0) ctx.moveTo(x(index), y(value));
-    else ctx.lineTo(x(index), y(value));
-  });
-  ctx.stroke();
+  if (state.showMa) {
+    ctx.strokeStyle = "#12805c";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ma20Series.forEach((value, index) => {
+      if (index === 0) ctx.moveTo(x(index), y(value));
+      else ctx.lineTo(x(index), y(value));
+    });
+    ctx.stroke();
+  }
 
   const support = Math.min(...prices.slice(-12));
   const resistance = Math.max(...prices.slice(-12));
@@ -503,12 +583,39 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     ctx.fillText(label, width - pad.right - 42, y(price) - 6);
   });
 
-  const signalIndex = prices.length - 5;
-  ctx.fillStyle = analysis.tone === "buy" ? "#12805c" : analysis.tone === "sell" ? "#1f6fb2" : "#a86b00";
-  ctx.beginPath();
-  ctx.arc(x(signalIndex), y(prices[signalIndex]) - 14, 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillText(analysis.signal, x(signalIndex) + 10, y(prices[signalIndex]) - 10);
+  if (state.showSignals && prices.length >= 5) {
+    const signalIndex = prices.length - 5;
+    ctx.fillStyle = analysis.tone === "buy" ? "#12805c" : analysis.tone === "sell" ? "#1f6fb2" : "#a86b00";
+    ctx.beginPath();
+    ctx.arc(x(signalIndex), y(prices[signalIndex]) - 14, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillText(analysis.signal, x(signalIndex) + 10, y(prices[signalIndex]) - 10);
+  }
+
+  if (canvasId === "tradingview-local-chart") renderChartInfo(stock, analysis, prices);
+}
+
+function renderChartInfo(stock, analysis, visiblePrices) {
+  const panel = $("chart-info-panel");
+  if (!panel) return;
+  const lastPrice = visiblePrices[visiblePrices.length - 1] || stock.price;
+  const firstPrice = visiblePrices[0] || lastPrice;
+  const visibleChange = firstPrice ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
+  const high = Math.max(...visiblePrices);
+  const low = Math.min(...visiblePrices);
+  panel.innerHTML = `
+    <strong>${stock.code}</strong>
+    <span>${stock.name} · ${stock.market}</span>
+    <div class="chart-info-price">${formatWon(stock.price)}</div>
+    <div class="${percentClass(stock.changeRate)}">${stock.changeRate > 0 ? "+" : ""}${stock.changeRate.toFixed(2)}%</div>
+    <dl>
+      <div><dt>표시 구간</dt><dd>${state.chartRange === "all" ? "전체" : `${state.chartRange}일`}</dd></div>
+      <div><dt>구간 등락</dt><dd class="${percentClass(visibleChange)}">${visibleChange > 0 ? "+" : ""}${visibleChange.toFixed(2)}%</dd></div>
+      <div><dt>구간 고가</dt><dd>${formatWon(high)}</dd></div>
+      <div><dt>구간 저가</dt><dd>${formatWon(low)}</dd></div>
+      <div><dt>신호</dt><dd>${analysis.signal}</dd></div>
+      <div><dt>점수</dt><dd>${analysis.total.toFixed(1)}점</dd></div>
+    </dl>`;
 }
 
 function drawUnavailableChart(entry, canvasId = "price-chart") {
@@ -516,7 +623,7 @@ function drawUnavailableChart(entry, canvasId = "price-chart") {
   if (!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const ratio = window.devicePixelRatio || 1;
-  const height = canvasId === "tradingview-local-chart" ? 486 : 460;
+  const height = canvasId === "tradingview-local-chart" ? 430 : 460;
   canvas.width = Math.max(rect.width, 320) * ratio;
   canvas.height = height * ratio;
   const ctx = canvas.getContext("2d");
@@ -540,6 +647,22 @@ function drawUnavailableChart(entry, canvasId = "price-chart") {
   ctx.font = "14px Segoe UI";
   ctx.fillText("상단 TradingView 위젯에서 이 종목의 실시간 차트를 확인할 수 있습니다.", 34, 150);
   ctx.fillText("아래 로컬 분석 차트는 정량 분석 데이터가 있는 종목에서 이동평균과 신호 지점을 함께 표시합니다.", 34, 176);
+  if (canvasId === "tradingview-local-chart") renderUnavailableChartInfo(entry);
+}
+
+function renderUnavailableChartInfo(entry) {
+  const panel = $("chart-info-panel");
+  if (!panel) return;
+  panel.innerHTML = `
+    <strong>${entry.code}</strong>
+    <span>${entry.name} · ${entry.market || "KOSPI/KOSDAQ"}</span>
+    <div class="chart-info-price">차트 확인</div>
+    <dl>
+      <div><dt>시장</dt><dd>${entry.market || "확인 필요"}</dd></div>
+      <div><dt>업종</dt><dd>${entry.sector || entry.industry || "확장 예정"}</dd></div>
+      <div><dt>점수</dt><dd>데이터 연결 후 제공</dd></div>
+      <div><dt>신호</dt><dd>차트 중심 확인</dd></div>
+    </dl>`;
 }
 
 function layoutAnalysisMasonry() {
