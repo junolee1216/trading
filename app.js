@@ -35,6 +35,12 @@ function renderTradingViewChart(entry) {
   tradingViewRenderId = renderId;
   const symbol = tradingViewSymbol(entry.code);
   const widgetId = `tradingview-widget-${renderId}`;
+
+  const chartInput = $("chart-stock-search");
+  const chartSymbol = $("chart-selected-symbol");
+  if (chartInput && document.activeElement !== chartInput) chartInput.value = `${entry.name || entry.code} (${entry.code})`;
+  if (chartSymbol) chartSymbol.textContent = symbol;
+
   container.innerHTML = `<div class="tradingview-status">${entry.name || entry.code} · ${symbol}</div><div id="${widgetId}" class="tradingview-widget-slot"></div>`;
 
   const widgetSlot = document.getElementById(widgetId);
@@ -52,7 +58,7 @@ function renderTradingViewChart(entry) {
     theme: "light",
     style: "1",
     locale: "kr",
-    allow_symbol_change: true,
+    allow_symbol_change: false,
     calendar: false,
     support_host: "https://www.tradingview.com",
     details: true,
@@ -288,6 +294,30 @@ function renderSearchResults(query = "") {
       return `<button class="search-result" type="button" data-code="${stock.code}">
         <span><strong>${stock.name}</strong><span>${meta}</span></span>
         <small>${hasDetail ? "상세 분석" : "실시간 분석"}</small>
+      </button>`;
+    })
+    .join("");
+  target.style.display = matches.length ? "block" : "none";
+}
+
+function renderChartSearchResults(query = "") {
+  const target = $("chart-search-results");
+  if (!target) return;
+  const normalizedKeyword = compactText(query);
+  if (!normalizedKeyword) {
+    target.innerHTML = "";
+    target.style.display = "none";
+    return;
+  }
+
+  const matches = getSearchMatches(query);
+  target.innerHTML = matches
+    .slice(0, 30)
+    .map((stock) => {
+      const meta = [stock.code, stock.market, stock.sector || stock.industry].filter(Boolean).join(" · ");
+      return `<button class="chart-search-result" type="button" data-code="${stock.code}">
+        <strong>${stock.name}</strong>
+        <span>${meta}</span>
       </button>`;
     })
     .join("");
@@ -683,6 +713,10 @@ function handleSearchInput(event) {
   }
 }
 
+function handleChartSearchInput(event) {
+  renderChartSearchResults(event.target.value);
+}
+
 $("stock-search").addEventListener("input", handleSearchInput);
 $("stock-search").addEventListener("keyup", handleSearchInput);
 $("stock-search").addEventListener("change", handleSearchInput);
@@ -691,6 +725,33 @@ $("search-results").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-code]");
   if (button) selectStock(button.dataset.code);
 });
+if ($("chart-stock-search")) {
+  $("chart-stock-search").addEventListener("focus", (event) => event.target.select());
+  $("chart-stock-search").addEventListener("input", handleChartSearchInput);
+  $("chart-stock-search").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      $("chart-search-results").style.display = "none";
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === "Enter") {
+      const bestMatch = getSearchMatches(event.currentTarget.value)[0];
+      if (bestMatch) {
+        selectStock(bestMatch.code);
+        $("chart-search-results").style.display = "none";
+      }
+    }
+  });
+}
+if ($("chart-search-results")) {
+  $("chart-search-results").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-code]");
+    if (button) {
+      selectStock(button.dataset.code);
+      $("chart-search-results").style.display = "none";
+    }
+  });
+}
 document.querySelector(".notice-link").addEventListener("click", (event) => {
   event.preventDefault();
   const notice = $("investment-notice");
@@ -710,6 +771,8 @@ document.querySelector(".notice-link").addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   const searchWrap = event.target.closest(".search-wrap");
   if (!searchWrap) $("search-results").style.display = "none";
+  const chartSearchWrap = event.target.closest(".chart-search-wrap");
+  if (!chartSearchWrap && $("chart-search-results")) $("chart-search-results").style.display = "none";
 });
 $("stock-search").addEventListener("keydown", (event) => {
   if (event.key === "Escape") {

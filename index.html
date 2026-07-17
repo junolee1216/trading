@@ -98,6 +98,14 @@
                 <span><i class="signal-dot"></i>신호</span>
               </div>
             </div>
+            <div class="chart-symbol-control">
+              <label for="chart-stock-search">차트 종목 변경</label>
+              <div class="chart-search-wrap">
+                <input id="chart-stock-search" type="search" autocomplete="off" placeholder="차트에 표시할 종목명 또는 코드 입력" />
+                <div id="chart-search-results" class="chart-search-results" aria-live="polite"></div>
+              </div>
+              <span id="chart-selected-symbol" class="chart-selected-symbol"></span>
+            </div>
             <div id="tradingview-chart" class="tradingview-chart"></div>
             <p class="chart-source-note">TradingView real-time chart. Local analysis chart below keeps MA and signal markers for this dashboard.</p>
             <canvas id="price-chart" class="local-price-chart" width="1100" height="460"></canvas>
