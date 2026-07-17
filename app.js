@@ -57,6 +57,7 @@ function renderTradingViewChart(entry) {
   ];
   const drawingTools = [
     ["cursor", "↖"],
+    ["line", "/"],
     ["brush", "⌁"],
     ["text", "T"],
     ["undo", "↶"],
@@ -82,7 +83,7 @@ function renderTradingViewChart(entry) {
       <div class="chart-drawing-tools" aria-label="보조 도구">
         ${drawingTools.map(([tool, label]) => `<button class="${state.activeDrawingTool === tool ? "active" : ""}" type="button" data-chart-tool="${tool}" aria-label="${chartToolLabel(tool)}">${label}</button>`).join("")}
       </div>
-      <div class="chart-canvas-shell" id="chart-canvas-shell">
+      <div class="chart-canvas-shell ${state.activeDrawingTool !== "cursor" ? "is-drawing-tool" : ""}" id="chart-canvas-shell">
         <canvas id="tradingview-local-chart" class="tradingview-local-chart" width="1100" height="486"></canvas>
         <svg id="chart-annotation-layer" class="chart-annotation-layer" aria-label="차트 주석 레이어"></svg>
         <div id="chart-text-layer" class="chart-text-layer"></div>
@@ -127,6 +128,7 @@ function intervalLabel(value) {
 function chartToolLabel(value) {
   return {
     cursor: "일반 마우스",
+    line: "직선 그리기",
     brush: "자유 그리기",
     text: "텍스트박스",
     undo: "되돌리기",
@@ -255,6 +257,8 @@ function updateDrawingToolUi() {
   });
   const status = document.querySelector(".chart-mode-status");
   if (status) status.textContent = currentChartModeText();
+  const shell = $("chart-canvas-shell");
+  if (shell) shell.classList.toggle("is-drawing-tool", state.activeDrawingTool !== "cursor");
 }
 
 function getCurrentRenderableStock() {
@@ -311,7 +315,9 @@ function bindAnnotationLayer() {
     event.preventDefault();
     shell.setPointerCapture(event.pointerId);
 
-    if (tool === "brush") {
+    if (tool === "line") {
+      activeDraftAnnotation = { type: "line", x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+    } else if (tool === "brush") {
       activeDraftAnnotation = { type: "path", points: [point] };
     } else if (tool === "text") {
       const note = { type: "text", x: point.x, y: point.y, text: "" };
@@ -340,7 +346,10 @@ function bindAnnotationLayer() {
     if (!activeDraftAnnotation) return;
     event.preventDefault();
     const point = getLayerPoint(event);
-    if (activeDraftAnnotation.type === "path") {
+    if (activeDraftAnnotation.type === "line") {
+      activeDraftAnnotation.x2 = point.x;
+      activeDraftAnnotation.y2 = point.y;
+    } else if (activeDraftAnnotation.type === "path") {
       activeDraftAnnotation.points.push(point);
     }
     renderChartAnnotations(activeDraftAnnotation);
@@ -357,6 +366,9 @@ function bindAnnotationLayer() {
     event.preventDefault();
     const draft = activeDraftAnnotation;
     activeDraftAnnotation = null;
+    if (draft.type === "line" && Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1) > 8) {
+      addChartAnnotation(draft);
+    }
     if (draft.type === "path" && draft.points.length > 2) {
       addChartAnnotation(draft);
     }

@@ -642,6 +642,10 @@ dd {
   touch-action: none;
 }
 
+.chart-canvas-shell.is-drawing-tool {
+  cursor: crosshair;
+}
+
 .chart-canvas-shell.is-panning {
   cursor: grabbing;
 }
