@@ -78,8 +78,10 @@ window.AnalysisEngine = (() => {
     const rsi = calculateRsi(prices);
     const macd = calculateMacd(prices);
     const bands = bollinger(prices);
-    const volChange = ((last(stock.volumes) - mean(stock.volumes.slice(-20))) / mean(stock.volumes.slice(-20))) * 100;
-    const position52 = ((current - stock.weekLow) / (stock.weekHigh - stock.weekLow)) * 100;
+    const avgVolume = mean(stock.volumes.slice(-20));
+    const volChange = avgVolume > 0 ? ((last(stock.volumes) - avgVolume) / avgVolume) * 100 : 0;
+    const weekRange = stock.weekHigh - stock.weekLow;
+    const position52 = weekRange > 0 ? ((current - stock.weekLow) / weekRange) * 100 : 50;
 
     let raw = 0;
     const items = [];
