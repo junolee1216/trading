@@ -296,6 +296,84 @@ window.AnalysisEngine = (() => {
     return reasons;
   }
 
+  function priceZone(value) {
+    return `${Math.round(value).toLocaleString()}원`;
+  }
+
+  function priceDiffPercent(from, to) {
+    if (!from) return 0;
+    return ((to - from) / from) * 100;
+  }
+
+  function buildForecast(stock, sections, total, signalInfo) {
+    const prices = stock.prices;
+    const current = last(prices);
+    const recent5 = priceDiffPercent(prices.at(-6) || prices[0], current);
+    const recent20 = priceDiffPercent(prices.at(-21) || prices[0], current);
+    const { ma5, ma20, ma60, rsi, macd, bands, volChange, position52 } = sections.technical.indicators;
+    const support = Math.min(...prices.slice(-20));
+    const resistance = Math.max(...prices.slice(-20));
+    const pullbackZone = Math.max(support, Math.min(ma20, bands.middle));
+    const reboundZone = Math.max(support, Math.min(ma5, ma20));
+    const breakoutZone = resistance * 1.01;
+
+    const rising = current >= ma20 && ma20 >= ma60 && recent5 >= 0;
+    const falling = current < ma20 && recent5 < 0;
+    const overheated = rsi >= 70 || position52 >= 82 || current >= bands.upper;
+    const oversold = rsi <= 35 || current <= bands.lower;
+    const momentumPositive = macd.histogram > 0 && volChange > -10;
+
+    let direction = "횡보/확인 구간";
+    let nearTerm = "단기 방향이 뚜렷하지 않아 20일선 회복 또는 이탈을 먼저 확인하는 구간입니다.";
+    let pullback = "20일선과 최근 지지선 사이에서 거래량이 줄어드는지 확인하는 것이 좋습니다.";
+    let buyTiming = "가격이 20일선 위로 회복하고 거래량이 20일 평균보다 증가할 때 분할 매수 검토 구간으로 봅니다.";
+    let sellTiming = "최근 지지선을 종가 기준으로 이탈하거나 점수가 44점 아래로 내려가면 매도 고려 신호가 강해집니다.";
+
+    if (rising) {
+      direction = overheated ? "상승 중이나 단기 과열" : "상승 추세 우위";
+      nearTerm = overheated
+        ? `RSI ${rsi.toFixed(1)}와 52주 위치 ${position52.toFixed(0)}%를 보면 1~5거래일 안에 차익 실현성 조정 가능성을 봐야 합니다.`
+        : `20일선 위에서 상승 흐름이 유지되고 있어 단기 추세는 우호적입니다. 다만 저항선 ${priceZone(resistance)} 부근에서는 속도 조절 가능성이 있습니다.`;
+      pullback = `상승 중 추격 매수보다는 ${priceZone(pullbackZone)} 부근 조정 후 지지 확인을 우선 봅니다.`;
+      buyTiming = `현재가가 조정받아도 ${priceZone(ma20)} 전후를 지키고 다시 양봉/거래량 증가가 나오면 매수 고려 타이밍으로 분류합니다.`;
+      sellTiming = `${priceZone(resistance)} 돌파 실패 후 거래량이 감소하거나, 종가가 ${priceZone(ma20)} 아래로 내려가면 단기 매도 주의로 전환합니다.`;
+    } else if (falling) {
+      direction = oversold ? "하락 중이나 반등 감시" : "하락 추세 우위";
+      nearTerm = oversold
+        ? `RSI ${rsi.toFixed(1)}로 과매도권에 가까워 기술적 반등은 가능하지만, 추세 전환 확인 전에는 신중한 구간입니다.`
+        : `현재가가 20일선 아래에 있어 하락 압력이 남아 있습니다. 바로 매수하기보다 반등 확인이 필요합니다.`;
+      pullback = `추가 하락 시 ${priceZone(support)} 부근에서 지지 여부를 우선 확인합니다. 이 가격대를 종가 기준 이탈하면 리스크가 커집니다.`;
+      buyTiming = `최소 조건은 ${priceZone(reboundZone)} 위 회복, RSI 40 이상 회복, 거래량 증가입니다. 이 조건이 같이 나올 때만 매수 검토로 봅니다.`;
+      sellTiming = `${priceZone(support)} 이탈 또는 외국인/기관 순매도 지속 시 반등보다 방어를 우선하는 구간입니다.`;
+    } else if (momentumPositive) {
+      direction = "반등 확인 구간";
+      nearTerm = `MACD 모멘텀이 개선되고 있어 ${priceZone(breakoutZone)} 돌파 여부가 다음 방향 판단 기준입니다.`;
+      pullback = `돌파 전에는 ${priceZone(ma20)} 부근에서 지지를 확인하는 접근이 더 보수적입니다.`;
+      buyTiming = `${priceZone(breakoutZone)} 위에서 종가가 유지되고 거래량이 증가하면 매수 고려 쪽 근거가 강화됩니다.`;
+      sellTiming = `${priceZone(ma20)} 아래로 다시 밀리면 반등 실패 가능성을 반영해 관망 또는 매도 주의로 봅니다.`;
+    }
+
+    return {
+      direction,
+      horizon: "단기 1~20거래일 기준",
+      nearTerm,
+      pullback,
+      buyTiming,
+      sellTiming,
+      levels: [
+        { label: "현재가", value: priceZone(current) },
+        { label: "20일선", value: priceZone(ma20) },
+        { label: "지지선", value: priceZone(support) },
+        { label: "저항선", value: priceZone(resistance) }
+      ],
+      watchPoints: [
+        `최근 5거래일 등락률 ${recent5 > 0 ? "+" : ""}${recent5.toFixed(2)}%, 20거래일 등락률 ${recent20 > 0 ? "+" : ""}${recent20.toFixed(2)}%입니다.`,
+        `RSI ${rsi.toFixed(1)}, MACD 히스토그램 ${macd.histogram.toFixed(0)}, 거래량 변화 ${volChange.toFixed(1)}%를 함께 봅니다.`,
+        `현재 신호는 '${signalInfo.signal}'이지만 예측 신뢰도는 ${total >= 64 && !overheated ? "상승 조건 확인" : "조건부 확인"}으로 해석합니다.`
+      ]
+    };
+  }
+
   function analyze(stock, market, mode = "balanced") {
     const profile = modeProfiles[mode] || modeProfiles.balanced;
     const sections = {
@@ -338,7 +416,9 @@ window.AnalysisEngine = (() => {
     if (stock.disclosures.length) risks.push("공시 내용은 추가 확인이 필요한 불확실성 요인입니다.");
     if (!risks.length) risks.push("현재 샘플 데이터 기준으로 큰 단기 리스크는 제한적이나 시장 변동성은 계속 확인해야 합니다.");
 
-    return { profile, sections, weighted, total, signal: signalInfo.signal, tone: signalInfo.tone, confidence: conf, reasons, risks };
+    const forecast = buildForecast(stock, sections, total, signalInfo);
+
+    return { profile, sections, weighted, total, signal: signalInfo.signal, tone: signalInfo.tone, confidence: conf, reasons, risks, forecast };
   }
 
   return { analyze, modeProfiles, movingAverage, formatSigned };

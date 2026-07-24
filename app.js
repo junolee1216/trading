@@ -50,6 +50,7 @@ const compactText = (value = "") => String(value).toLowerCase().replace(/\s+/g, 
 const tradingViewSymbol = (code) => `KRX:${String(code).padStart(6, "0")}`;
 const dynamicStockCache = new Map();
 const dynamicStockRequests = new Map();
+const recommendationCache = new Map();
 let tradingViewRenderId = 0;
 let activeDraftAnnotation = null;
 let activePan = null;
@@ -794,6 +795,75 @@ function signalFromScore(score, max) {
   return { label: "중립", tone: "hold" };
 }
 
+function getAnalyzedUniverse(mode = state.mode) {
+  if (recommendationCache.has(mode)) return recommendationCache.get(mode);
+  const analyzed = data.stocks
+    .filter((stock) => Number.isFinite(stock.price) && Array.isArray(stock.prices) && stock.prices.length >= 20)
+    .map((stock) => {
+      const analysis = engine.analyze(stock, data.market, mode);
+      return { stock, analysis };
+    });
+  recommendationCache.set(mode, analyzed);
+  return analyzed;
+}
+
+function recommendationReason(stock, analysis) {
+  const technical = analysis.weighted.technical.toFixed(1);
+  const fundamental = analysis.weighted.fundamental.toFixed(1);
+  const confidence = analysis.confidence.label.replace("신뢰도 ", "");
+  return `${analysis.signal} · 기술 ${technical}점, 기본 ${fundamental}점 · ${confidence}`;
+}
+
+function recommendationButton(item, rank, variant = "") {
+  const { stock, analysis } = item;
+  return `<button class="recommendation-item ${variant}" type="button" data-code="${stock.code}">
+    <span class="recommendation-rank">${rank}</span>
+    <span class="recommendation-body">
+      <strong>${stock.name} <small>${stock.code}</small></strong>
+      <span>${stock.market} · ${stock.sector || "업종 정보 준비 중"}</span>
+      <em>${recommendationReason(stock, analysis)}</em>
+    </span>
+    <span class="recommendation-score">
+      <strong>${analysis.total.toFixed(1)}</strong>
+      <span class="${percentClass(stock.changeRate)}">${stock.changeRate > 0 ? "+" : ""}${stock.changeRate.toFixed(2)}%</span>
+    </span>
+  </button>`;
+}
+
+function renderRecommendations(selectedStock = getStock()) {
+  const meta = $("recommendation-meta");
+  const buyList = $("recommendation-buy-list");
+  const sectorList = $("recommendation-sector-list");
+  const riskList = $("recommendation-risk-list");
+  if (!meta || !buyList || !sectorList || !riskList) return;
+
+  const analyzed = getAnalyzedUniverse(state.mode);
+  const selectedSector = selectedStock?.sector;
+  const recommended = analyzed
+    .filter(({ analysis }) => analysis.total >= 64 && analysis.confidence.score >= 35)
+    .sort((a, b) => b.analysis.total - a.analysis.total || b.analysis.confidence.score - a.analysis.confidence.score)
+    .slice(0, 5);
+  const sectorPeers = analyzed
+    .filter(({ stock }) => selectedSector && stock.sector === selectedSector && stock.code !== selectedStock.code)
+    .sort((a, b) => b.analysis.total - a.analysis.total)
+    .slice(0, 5);
+  const riskCandidates = analyzed
+    .filter(({ analysis }) => analysis.total < 52)
+    .sort((a, b) => a.analysis.total - b.analysis.total || a.analysis.confidence.score - b.analysis.confidence.score)
+    .slice(0, 5);
+
+  meta.textContent = `${engine.modeProfiles[state.mode].label} · ${analyzed.length.toLocaleString()}개 종목 분석`;
+  buyList.innerHTML = recommended.length
+    ? recommended.map((item, index) => recommendationButton(item, index + 1)).join("")
+    : `<p class="subtle">현재 조건에서 상위 추천 후보가 충분하지 않습니다.</p>`;
+  sectorList.innerHTML = sectorPeers.length
+    ? sectorPeers.map((item, index) => recommendationButton(item, index + 1, item.stock.code === selectedStock.code ? "active" : "")).join("")
+    : `<p class="subtle">선택 종목과 같은 업종의 비교 후보가 부족합니다.</p>`;
+  riskList.innerHTML = riskCandidates.length
+    ? riskCandidates.map((item, index) => recommendationButton(item, index + 1, "risk")).join("")
+    : `<p class="subtle">현재 기준에서 뚜렷한 주의 후보가 많지 않습니다.</p>`;
+}
+
 function renderSummary(stock, analysis) {
   setPriceFallbackMode(false);
   $("stock-market").textContent = `${stock.market} · ${stock.sector}`;
@@ -851,6 +921,21 @@ function renderAnalysis(stock, analysis) {
     ["평균 보유 기간", formatNullable(stock.backtest.holdingDays, "일")],
     [`${stock.market} 대비 초과 수익률`, formatNullable(stock.backtest.excessReturn, "%")]
   ].map(([label, value]) => `<div class="metric-card"><strong>${label}</strong><span>${value}</span></div>`).join("");
+}
+
+function renderForecast(analysis) {
+  const forecast = analysis.forecast;
+  if (!forecast) return;
+  $("forecast-horizon").textContent = forecast.horizon;
+  $("forecast-direction").textContent = forecast.direction;
+  $("forecast-near-term").textContent = forecast.nearTerm;
+  $("forecast-pullback").textContent = forecast.pullback;
+  $("forecast-buy-timing").textContent = forecast.buyTiming;
+  $("forecast-sell-timing").textContent = forecast.sellTiming;
+  $("forecast-levels").innerHTML = forecast.levels
+    .map((item) => `<div><dt>${item.label}</dt><dd>${item.value}</dd></div>`)
+    .join("");
+  $("forecast-watch-points").innerHTML = forecast.watchPoints.map((point) => `<li>${point}</li>`).join("");
 }
 
 function renderMode() {
@@ -1211,6 +1296,23 @@ function renderUnavailable(entry) {
     "뉴스와 공시 이슈는 별도 확인 후 투자 판단에 반영해야 합니다."
   ].map((risk) => `<li>${risk}</li>`).join("");
   $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>확장 기능에서 제공</span></div>`).join("");
+  $("forecast-horizon").textContent = "차트 기반 확인";
+  $("forecast-direction").textContent = "정량 예측 준비 중";
+  $("forecast-near-term").textContent = "가격 데이터 자동 조회가 완료되면 상승/하락 추세와 매수 검토 조건을 계산합니다.";
+  $("forecast-pullback").textContent = "현재는 TradingView 차트에서 최근 지지선과 저항선을 직접 확인해야 합니다.";
+  $("forecast-buy-timing").textContent = "20일선 회복, 거래량 증가, RSI 회복 조건이 같이 나올 때를 우선 확인합니다.";
+  $("forecast-sell-timing").textContent = "최근 지지선 이탈이나 급격한 거래량 감소가 보이면 보수적으로 대응해야 합니다.";
+  $("forecast-levels").innerHTML = [
+    ["종목", entry.code],
+    ["시장", entry.market || "KOSPI/KOSDAQ"],
+    ["가격대", "차트 확인"],
+    ["신뢰도", "데이터 대기"]
+  ].map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
+  $("forecast-watch-points").innerHTML = [
+    "자동 가격 데이터가 연결되면 예상 조정 구간과 반등 확인 조건을 계산합니다.",
+    "데이터 부족 상태에서는 특정 매수 날짜나 가격을 단정하지 않습니다.",
+    "실시간 차트의 캔들, 거래량, 지지/저항을 먼저 확인해 주세요."
+  ].map((point) => `<li>${point}</li>`).join("");
   renderTradingViewChart(entry);
   drawUnavailableChart(entry, "tradingview-local-chart");
   requestAnimationFrame(layoutAnalysisMasonry);
@@ -1219,6 +1321,7 @@ function renderUnavailable(entry) {
   const watched = state.watchlist.includes(entry.code);
   watchButton.textContent = watched ? "관심 해제" : "관심 추가";
   watchButton.classList.toggle("active", watched);
+  renderRecommendations(getStockEntry(entry.code) || getStock());
   renderWatchlist();
 }
 
@@ -1227,6 +1330,8 @@ function renderDetailedStock(stock) {
   renderMode();
   renderSummary(stock, analysis);
   renderAnalysis(stock, analysis);
+  renderForecast(analysis);
+  renderRecommendations(stock);
   renderWatchlist();
   renderTradingViewChart(stock);
   drawChart(stock, analysis, "tradingview-local-chart");
@@ -1289,6 +1394,10 @@ $("stock-search").addEventListener("keyup", handleSearchInput);
 $("stock-search").addEventListener("change", handleSearchInput);
 $("stock-search").addEventListener("click", (event) => renderSearchResults(event.target.value));
 $("search-results").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-code]");
+  if (button) selectStock(button.dataset.code);
+});
+document.querySelector(".recommendation-panel").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-code]");
   if (button) selectStock(button.dataset.code);
 });

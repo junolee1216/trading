@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>코스피/코스닥 데이터 판단 대시보드</title>
-    <link rel="stylesheet" href="./styles.css?v=five-signal-v2-20260724" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2326323f'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='22' font-weight='700' fill='white'%3EKR%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css?v=forecast-v1-20260724" />
   </head>
   <body>
     <header class="topbar">
@@ -85,6 +86,64 @@
             </div>
             <p id="mode-description" class="subtle"></p>
           </article>
+        </section>
+
+        <section class="analysis-panel forecast-panel">
+          <div class="section-heading">
+            <div>
+              <p class="meta">조건부 예측</p>
+              <h2>언제 조정/반등을 볼지</h2>
+            </div>
+            <span id="forecast-horizon"></span>
+          </div>
+          <div class="forecast-main">
+            <div>
+              <strong id="forecast-direction"></strong>
+              <p id="forecast-near-term"></p>
+            </div>
+            <dl id="forecast-levels" class="forecast-levels"></dl>
+          </div>
+          <div class="forecast-grid">
+            <div class="forecast-card">
+              <span>조정/반등 기준</span>
+              <p id="forecast-pullback"></p>
+            </div>
+            <div class="forecast-card">
+              <span>매수 검토 타이밍</span>
+              <p id="forecast-buy-timing"></p>
+            </div>
+            <div class="forecast-card">
+              <span>매도/주의 타이밍</span>
+              <p id="forecast-sell-timing"></p>
+            </div>
+          </div>
+          <ul id="forecast-watch-points" class="forecast-watch-points"></ul>
+          <p class="fine-print">이 영역은 가격·거래량·이동평균선 기반 조건부 시나리오이며, 실제 미래 가격을 보장하지 않습니다.</p>
+        </section>
+
+        <section class="analysis-panel recommendation-panel">
+          <div class="section-heading">
+            <div>
+              <p class="meta">현재 분석 모드 기준</p>
+              <h2>참고 추천 후보</h2>
+            </div>
+            <span id="recommendation-meta"></span>
+          </div>
+          <div class="recommendation-columns">
+            <div>
+              <h3>점수 상위 후보</h3>
+              <div id="recommendation-buy-list" class="recommendation-list"></div>
+            </div>
+            <div>
+              <h3>같은 업종 비교</h3>
+              <div id="recommendation-sector-list" class="recommendation-list"></div>
+            </div>
+            <div>
+              <h3>주의 후보</h3>
+              <div id="recommendation-risk-list" class="recommendation-list"></div>
+            </div>
+          </div>
+          <p class="fine-print">추천 후보는 점수 기반 참고 목록이며, 최종 투자 판단과 책임은 사용자 본인에게 있습니다.</p>
         </section>
 
         <section class="content-grid research-grid">
@@ -172,7 +231,7 @@
     <script src="./stockUniverse.js?v=universe-20260701"></script>
     <script src="./stockSearchRank.js?v=rank-20260701b"></script>
     <script src="./data.js?v=data-full-detail-20260724"></script>
-    <script src="./analysisEngine.js?v=five-signal-v2-20260724"></script>
-    <script src="./app.js?v=five-signal-v2-20260724"></script>
+    <script src="./analysisEngine.js?v=forecast-v1-20260724"></script>
+    <script src="./app.js?v=forecast-v1-20260724"></script>
   </body>
 </html>
