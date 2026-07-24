@@ -238,6 +238,64 @@ window.AnalysisEngine = (() => {
     return { label: "신뢰도 낮음", score, warning: "데이터 부족 또는 지표 간 충돌로 인해 판단 신뢰도가 낮습니다." };
   }
 
+  function signalFromTotal(total) {
+    if (total >= 78) return { signal: "강한 매수 고려", tone: "strong-buy", label: "상승 우위가 뚜렷한 구간" };
+    if (total >= 64) return { signal: "매수 고려", tone: "buy", label: "매수 쪽 근거가 조금 더 우세한 구간" };
+    if (total >= 52) return { signal: "보유/관망", tone: "hold", label: "신호가 엇갈려 확인이 필요한 구간" };
+    if (total >= 44) return { signal: "매도 주의", tone: "caution", label: "하락 또는 리스크 근거가 우세한 구간" };
+    return { signal: "매도 고려", tone: "sell", label: "방어적 판단이 필요한 구간" };
+  }
+
+  function sectionName(key) {
+    return {
+      technical: "기술적 분석",
+      fundamental: "기본적 분석",
+      flow: "수급 분석",
+      news: "뉴스/공시",
+      market: "시장 상황"
+    }[key] || key;
+  }
+
+  function sectionReason(key, score, weight, sections, stock) {
+    if (key === "technical") {
+      const indicators = sections.technical.indicators;
+      const trend = stock.price >= indicators.ma20 ? "20일 이동평균선 위" : "20일 이동평균선 아래";
+      return `기술적 분석은 ${score.toFixed(1)}/${weight}점입니다. 현재가는 ${trend}에 있고 RSI는 ${indicators.rsi.toFixed(1)}, 거래량 변화는 ${indicators.volChange.toFixed(1)}%로 반영됐습니다.`;
+    }
+    if (key === "fundamental") {
+      return `기본적 분석은 ${score.toFixed(1)}/${weight}점입니다. PER/PBR/ROE 등 미확인 재무 항목 ${sections.fundamental.missing}개는 판단 신뢰도를 낮추고 중립으로 반영했습니다.`;
+    }
+    if (key === "flow") {
+      return `수급 분석은 ${score.toFixed(1)}/${weight}점입니다. ${sections.flow.together}`;
+    }
+    if (key === "news") {
+      return sections.news.unavailable
+        ? `뉴스/공시는 ${score.toFixed(1)}/${weight}점입니다. 연결된 뉴스와 공시가 부족해 기회·리스크 판단은 중립으로 제한했습니다.`
+        : `뉴스/공시는 ${score.toFixed(1)}/${weight}점입니다. 긍정/부정 뉴스와 공시 영향을 점수에 반영했습니다.`;
+    }
+    return `시장 상황은 ${score.toFixed(1)}/${weight}점입니다. KOSPI, KOSDAQ, 환율, 금리, 업종 흐름을 개별 종목 점수에 함께 반영했습니다.`;
+  }
+
+  function buildReasons(stock, sections, weighted, profile, total, signalInfo, dataLimited) {
+    const entries = Object.keys(profile.weights).map((key) => ({
+      key,
+      score: weighted[key],
+      weight: profile.weights[key],
+      ratio: weighted[key] / profile.weights[key]
+    }));
+    const technicalEntry = entries.find((entry) => entry.key === "technical");
+    const weakest = [...entries].filter((entry) => entry.key !== "technical").sort((a, b) => a.ratio - b.ratio)[0];
+    const reasons = [
+      `종합 점수는 ${total.toFixed(1)}점입니다. 78점 이상은 강한 매수 고려, 64~77점은 매수 고려, 52~63점은 보유/관망, 44~51점은 매도 주의, 44점 미만은 매도 고려로 분류하며 현재 신호는 '${signalInfo.signal}'입니다.`,
+      sectionReason("technical", technicalEntry.score, technicalEntry.weight, sections, stock),
+      dataLimited
+        ? `재무 미확인 항목 ${sections.fundamental.missing}개, 수급 데이터 미연결, 뉴스/공시 부족이 신뢰도 제한 요인입니다. 이 부족 데이터는 매수 또는 매도 쪽으로 억지 반영하지 않고 중립 및 보수 조정으로 처리했습니다.`
+        : sectionReason(weakest.key, weakest.score, weakest.weight, sections, stock)
+    ];
+
+    return reasons;
+  }
+
   function analyze(stock, market, mode = "balanced") {
     const profile = modeProfiles[mode] || modeProfiles.balanced;
     const sections = {
@@ -264,23 +322,9 @@ window.AnalysisEngine = (() => {
     if (sections.market.raw / sections.market.max < 0.45 && total >= 70) total -= 5;
     total = clamp(total, 0, 100);
 
-    const buyThreshold = dataLimited ? 66 : 70;
-    const sellThreshold = dataLimited ? 48 : 40;
-    const signal = total >= buyThreshold ? "매수 고려" : total >= sellThreshold ? "보유/관망" : "매도 고려";
-    const tone = total >= buyThreshold ? "buy" : total >= sellThreshold ? "hold" : "sell";
+    const signalInfo = signalFromTotal(total);
     const conf = confidence(stock, sections, total);
-
-    const reasons = [
-      sections.flow.together,
-      stock.price > sections.technical.indicators.ma20
-        ? "주가가 20일 이동평균선 위에 있어 단기 추세가 우호적으로 반영되었습니다."
-        : "주가가 20일 이동평균선 아래에 있어 추세 회복 확인이 필요합니다.",
-      stock.fundamentals.per && stock.sectorAverage.per && stock.fundamentals.per < stock.sectorAverage.per
-        ? `PER이 업종 평균보다 낮아 가격 부담이 일부 완화됩니다.`
-        : stock.fundamentals.per
-          ? `밸류에이션 지표는 단독 기준으로 참고 반영되었습니다.`
-          : `재무 지표 미확인 항목은 매도 근거가 아니라 중립으로 반영되었습니다.`
-    ];
+    const reasons = buildReasons(stock, sections, weighted, profile, total, signalInfo, dataLimited);
 
     const risks = [];
     if (sections.technical.indicators.position52 > 80) risks.push("52주 고점에 가까워 단기 급등 후 조정 가능성이 있습니다.");
@@ -294,7 +338,7 @@ window.AnalysisEngine = (() => {
     if (stock.disclosures.length) risks.push("공시 내용은 추가 확인이 필요한 불확실성 요인입니다.");
     if (!risks.length) risks.push("현재 샘플 데이터 기준으로 큰 단기 리스크는 제한적이나 시장 변동성은 계속 확인해야 합니다.");
 
-    return { profile, sections, weighted, total, signal, tone, confidence: conf, reasons, risks };
+    return { profile, sections, weighted, total, signal: signalInfo.signal, tone: signalInfo.tone, confidence: conf, reasons, risks };
   }
 
   return { analyze, modeProfiles, movingAverage, formatSigned };

@@ -30,6 +30,20 @@ const $ = (id) => document.getElementById(id);
 const formatWon = (value) => `${value.toLocaleString()}원`;
 const formatNullable = (value, suffix = "") => (value === null || value === undefined ? "연결 필요" : `${value}${suffix}`);
 const percentClass = (value) => (value > 0 ? "positive" : value < 0 ? "negative" : "neutral");
+const signalColor = (tone) => ({
+  "strong-buy": "var(--green)",
+  buy: "var(--green)",
+  hold: "var(--amber)",
+  caution: "var(--orange)",
+  sell: "var(--blue)"
+}[tone] || "var(--amber)");
+const canvasSignalColor = (tone) => ({
+  "strong-buy": "#0f6f4f",
+  buy: "#12805c",
+  hold: "#a86b00",
+  caution: "#b45309",
+  sell: "#1f6fb2"
+}[tone] || "#a86b00");
 const getStock = () => data.stocks.find((stock) => stock.code === state.selectedCode) || data.stocks[0];
 const getStockEntry = (code) => stockUniverse.find((stock) => stock.code === code) || data.stocks.find((stock) => stock.code === code);
 const compactText = (value = "") => String(value).toLowerCase().replace(/\s+/g, "");
@@ -799,7 +813,7 @@ function renderSummary(stock, analysis) {
   $("final-signal").textContent = analysis.signal;
   $("total-score").textContent = `${analysis.total.toFixed(1)}점`;
   $("scorebar-fill").style.width = `${analysis.total}%`;
-  $("scorebar-fill").style.background = analysis.tone === "buy" ? "var(--green)" : analysis.tone === "sell" ? "var(--blue)" : "var(--amber)";
+  $("scorebar-fill").style.background = signalColor(analysis.tone);
   $("confidence").textContent = `${analysis.confidence.label} (${analysis.confidence.score.toFixed(0)}점)${analysis.confidence.warning ? ` · ${analysis.confidence.warning}` : ""}`;
   $("top-reasons").innerHTML = analysis.reasons.map((reason) => `<li>${reason}</li>`).join("");
 
@@ -862,7 +876,7 @@ function renderWatchlist() {
       </button>`;
     }
     const analysis = engine.analyze(stock, data.market, state.mode);
-    const changed = stock.changeRate > 1.5 || analysis.total >= 70 || analysis.total < 40;
+    const changed = stock.changeRate > 1.5 || analysis.total >= 64 || analysis.total < 48;
     return `<button class="watch-item ${changed ? "changed" : ""}" type="button" data-code="${stock.code}">
       <strong>${stock.name} · ${analysis.signal}</strong>
       <span>${analysis.total.toFixed(1)}점 · <span class="${percentClass(stock.changeRate)}">${stock.changeRate > 0 ? "+" : ""}${stock.changeRate.toFixed(2)}%</span></span>
@@ -1039,7 +1053,7 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
   if (isFullyZoomedOut() && state.showSignals && prices.length >= 5) {
     const signalIndex = prices.length - 5;
     const signalY = y(prices[signalIndex]);
-    ctx.fillStyle = analysis.tone === "buy" ? "#12805c" : analysis.tone === "sell" ? "#1f6fb2" : "#a86b00";
+    ctx.fillStyle = canvasSignalColor(analysis.tone);
     ctx.beginPath();
     ctx.arc(x(signalIndex), signalY - 14, 6, 0, Math.PI * 2);
     ctx.fill();

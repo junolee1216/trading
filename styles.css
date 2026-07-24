@@ -9,6 +9,7 @@
   --green: #12805c;
   --red: #c83e4d;
   --amber: #a86b00;
+  --orange: #b45309;
   --ink: #26323f;
   --shadow: 0 12px 28px rgba(25, 42, 58, 0.08);
   --shadow-soft: 0 6px 18px rgba(25, 42, 58, 0.06);
@@ -445,12 +446,20 @@ dd {
   font-weight: 700;
 }
 
+.signal-card.strong-buy {
+  border-color: rgba(15, 111, 79, 0.45);
+}
+
 .signal-card.buy {
   border-color: rgba(18, 128, 92, 0.35);
 }
 
 .signal-card.hold {
   border-color: rgba(168, 107, 0, 0.35);
+}
+
+.signal-card.caution {
+  border-color: rgba(180, 83, 9, 0.38);
 }
 
 .signal-card.sell {
