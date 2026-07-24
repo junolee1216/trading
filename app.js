@@ -8,9 +8,10 @@ const stockUniverse = window.KR_STOCK_UNIVERSE || data.stocks.map((stock) => ({
   industry: ""
 }));
 const stockSearchRank = window.KR_STOCK_SEARCH_RANK || {};
+const savedSelectedCode = localStorage.getItem("kr-selected-stock");
 
 const state = {
-  selectedCode: data.stocks[0].code,
+  selectedCode: getInitialSelectedCode(),
   mode: "balanced",
   chartInterval: "D",
   chartRange: "all",
@@ -23,7 +24,8 @@ const state = {
   chartRedoStack: {},
   currentChartLength: 60,
   watchlist: JSON.parse(localStorage.getItem("kr-watchlist") || "[]"),
-  collapsedPanels: JSON.parse(localStorage.getItem("kr-collapsed-panels") || "[]")
+  collapsedPanels: JSON.parse(localStorage.getItem("kr-collapsed-panels") || "[]"),
+  scoreAnimationKey: ""
 };
 
 const $ = (id) => document.getElementById(id);
@@ -51,10 +53,21 @@ const tradingViewSymbol = (code) => `KRX:${String(code).padStart(6, "0")}`;
 const dynamicStockCache = new Map();
 const dynamicStockRequests = new Map();
 const recommendationCache = new Map();
+const liveNewsCache = new Map();
+const liveNewsRequests = new Map();
 let tradingViewRenderId = 0;
 let activeDraftAnnotation = null;
 let activePan = null;
 let chartClockTimer = null;
+let scoreAnimationFrame = 0;
+let scoreAnimationTimeout = 0;
+
+function getInitialSelectedCode() {
+  if (savedSelectedCode && (data.stocks.some((stock) => stock.code === savedSelectedCode) || stockUniverse.some((stock) => stock.code === savedSelectedCode))) {
+    return savedSelectedCode;
+  }
+  return data.stocks[0].code;
+}
 
 function renderTradingViewChart(entry) {
   const container = $("tradingview-chart");
@@ -580,6 +593,10 @@ function saveCollapsedPanels() {
   localStorage.setItem("kr-collapsed-panels", JSON.stringify(state.collapsedPanels));
 }
 
+function saveSelectedStock() {
+  localStorage.setItem("kr-selected-stock", state.selectedCode);
+}
+
 function getSearchMatches(query = "") {
   const normalizedKeyword = compactText(query);
   if (!normalizedKeyword) return [];
@@ -700,7 +717,7 @@ function fetchDynamicStock(entry) {
 }
 
 function setupCollapsiblePanels() {
-  const panels = document.querySelectorAll(".price-panel, .signal-card, .mode-panel, .chart-panel, .analysis-panel, .roadmap");
+  const panels = document.querySelectorAll(".price-panel, .signal-card, .chart-panel, .analysis-panel, .roadmap");
   panels.forEach((panel, index) => {
     if (panel.dataset.collapsibleReady) return;
     const heading = panel.querySelector(".section-heading h2, h1, h2, .meta, .brand strong, strong");
@@ -778,10 +795,61 @@ function renderSearchResults(query = "") {
   target.style.display = matches.length ? "block" : "none";
 }
 
+const termTooltips = {
+  이동평균선: "최근 며칠 동안의 평균 주가를 선으로 표시한 것입니다. 주가가 평균선 위에 있으면 흐름이 비교적 강하다고 봅니다.",
+  RSI: "주가가 너무 많이 올랐는지, 너무 많이 떨어졌는지 보는 지표입니다. 보통 70 이상은 과열, 30 이하는 과매도로 봅니다.",
+  MACD: "짧은 기간과 긴 기간의 주가 흐름 차이를 보는 지표입니다. 상승 힘이 커지는지 약해지는지 확인할 때 씁니다.",
+  볼린저밴드: "주가가 평소 움직임보다 위나 아래로 많이 벗어났는지 보는 범위입니다. 위쪽이면 과열, 아래쪽이면 과매도 가능성을 봅니다.",
+  "거래량 변화": "최근 거래량이 평소보다 얼마나 늘거나 줄었는지 보여줍니다. 가격 변화와 함께 보면 신호의 힘을 판단하는 데 도움이 됩니다.",
+  "52주 위치": "현재 주가가 최근 1년 최고가와 최저가 사이에서 어느 위치에 있는지 보여줍니다.",
+  PER: "주가가 회사 이익에 비해 비싼지 싼지 보는 지표입니다. 숫자가 낮다고 항상 좋은 것은 아니지만 가격 부담을 볼 때 씁니다.",
+  PBR: "주가가 회사 순자산에 비해 비싼지 싼지 보는 지표입니다. 1배에 가까우면 장부가치와 비슷하다는 뜻입니다.",
+  ROE: "회사가 자기자본으로 얼마나 효율적으로 이익을 내는지 보는 지표입니다. 높을수록 수익성이 좋다고 해석할 수 있습니다.",
+  "매출 성장률": "회사의 매출이 전보다 얼마나 늘었는지 보여줍니다. 성장성이 있는지 볼 때 사용합니다.",
+  "영업이익 성장률": "본업에서 벌어들인 이익이 전보다 얼마나 늘었는지 보여줍니다.",
+  "순이익 성장률": "회사가 최종적으로 남긴 이익이 전보다 얼마나 늘었는지 보여줍니다.",
+  부채비율: "회사가 가진 자기자본에 비해 빚이 얼마나 많은지 보는 지표입니다. 너무 높으면 재무 부담이 커질 수 있습니다.",
+  영업이익률: "매출 중 본업 이익으로 남는 비율입니다. 높을수록 수익성이 좋다고 볼 수 있습니다.",
+  배당수익률: "현재 주가 대비 배당금이 어느 정도인지 보여줍니다. 배당 투자자가 자주 보는 지표입니다.",
+  외국인비율: "외국인 투자자가 보유한 주식 비중입니다. 외국인 수급 관심도를 볼 때 참고합니다."
+};
+
+function tooltipLabel(label) {
+  const tooltip = termTooltips[label];
+  return tooltip ? `<span class="has-tooltip term-tooltip" tabindex="0" data-tooltip="${tooltip}">${label}</span>` : label;
+}
+
+function showTooltip(target) {
+  const tooltip = $("tooltip-popover");
+  const text = target?.dataset?.tooltip;
+  if (!tooltip || !text) return;
+  tooltip.textContent = text;
+  tooltip.setAttribute("aria-hidden", "false");
+  tooltip.classList.add("visible");
+
+  const rect = target.getBoundingClientRect();
+  const width = Math.min(320, window.innerWidth - 24);
+  tooltip.style.maxWidth = `${width}px`;
+  tooltip.style.left = "0";
+  tooltip.style.top = "0";
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const left = Math.max(12, Math.min(window.innerWidth - tooltipRect.width - 12, rect.left + rect.width / 2 - tooltipRect.width / 2));
+  const top = rect.top >= tooltipRect.height + 14 ? rect.top - tooltipRect.height - 10 : rect.bottom + 10;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${Math.max(12, top)}px`;
+}
+
+function hideTooltip() {
+  const tooltip = $("tooltip-popover");
+  if (!tooltip) return;
+  tooltip.classList.remove("visible");
+  tooltip.setAttribute("aria-hidden", "true");
+}
+
 function indicatorCard(item) {
   const tag = item.tag || signalFromScore(item.score, item.max);
   return `<div class="indicator-card">
-    <strong>${item.name}</strong>
+    <strong>${tooltipLabel(item.name)}</strong>
     <div>${item.value}</div>
     <p class="subtle">${item.detail}</p>
     <span class="tag ${tag.tone}">${tag.label}</span>
@@ -793,6 +861,50 @@ function signalFromScore(score, max) {
   if (ratio >= 0.68) return { label: "매수 신호", tone: "buy" };
   if (ratio <= 0.38) return { label: "매도 신호", tone: "sell" };
   return { label: "중립", tone: "hold" };
+}
+
+function setScoreDisplay(score, tone) {
+  const safeScore = Math.max(0, Math.min(100, score));
+  $("total-score").textContent = `${safeScore.toFixed(1)}점`;
+  const fill = $("scorebar-fill");
+  fill.style.width = `${safeScore}%`;
+  $("scorebar-fill").style.background = signalColor(tone);
+}
+
+function animateScoreDisplay(stock, analysis) {
+  const animationKey = `${stock.code}:${state.mode}:${analysis.total.toFixed(1)}:${analysis.signal}`;
+  const shouldAnimate = state.scoreAnimationKey !== animationKey;
+  state.scoreAnimationKey = animationKey;
+  window.cancelAnimationFrame(scoreAnimationFrame);
+  window.clearTimeout(scoreAnimationTimeout);
+
+  if (!shouldAnimate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setScoreDisplay(analysis.total, analysis.tone);
+    return;
+  }
+
+  const duration = 950;
+  let startedAt = 0;
+  const fill = $("scorebar-fill");
+  fill.classList.add("is-resetting");
+  setScoreDisplay(0, analysis.tone);
+  void fill.offsetWidth;
+
+  const tick = (now) => {
+    if (!startedAt) {
+      startedAt = now;
+      fill.classList.remove("is-resetting");
+    }
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const eased = 1 - (1 - progress) ** 3;
+    setScoreDisplay(analysis.total * eased, analysis.tone);
+    if (progress < 1) scoreAnimationFrame = window.requestAnimationFrame(tick);
+    else setScoreDisplay(analysis.total, analysis.tone);
+  };
+
+  scoreAnimationTimeout = window.setTimeout(() => {
+    scoreAnimationFrame = window.requestAnimationFrame(tick);
+  }, 180);
 }
 
 function getAnalyzedUniverse(mode = state.mode) {
@@ -835,33 +947,20 @@ function renderRecommendations(selectedStock = getStock()) {
   const buyList = $("recommendation-buy-list");
   const sectorList = $("recommendation-sector-list");
   const riskList = $("recommendation-risk-list");
-  if (!meta || !buyList || !sectorList || !riskList) return;
+  if (!meta || !buyList) return;
 
   const analyzed = getAnalyzedUniverse(state.mode);
-  const selectedSector = selectedStock?.sector;
   const recommended = analyzed
     .filter(({ analysis }) => analysis.total >= 64 && analysis.confidence.score >= 35)
     .sort((a, b) => b.analysis.total - a.analysis.total || b.analysis.confidence.score - a.analysis.confidence.score)
-    .slice(0, 5);
-  const sectorPeers = analyzed
-    .filter(({ stock }) => selectedSector && stock.sector === selectedSector && stock.code !== selectedStock.code)
-    .sort((a, b) => b.analysis.total - a.analysis.total)
-    .slice(0, 5);
-  const riskCandidates = analyzed
-    .filter(({ analysis }) => analysis.total < 52)
-    .sort((a, b) => a.analysis.total - b.analysis.total || a.analysis.confidence.score - b.analysis.confidence.score)
-    .slice(0, 5);
+    .slice(0, 3);
 
-  meta.textContent = `${engine.modeProfiles[state.mode].label} · ${analyzed.length.toLocaleString()}개 종목 분석`;
+  meta.textContent = `${analyzed.length.toLocaleString()}개 종목 분석`;
   buyList.innerHTML = recommended.length
     ? recommended.map((item, index) => recommendationButton(item, index + 1)).join("")
     : `<p class="subtle">현재 조건에서 상위 추천 후보가 충분하지 않습니다.</p>`;
-  sectorList.innerHTML = sectorPeers.length
-    ? sectorPeers.map((item, index) => recommendationButton(item, index + 1, item.stock.code === selectedStock.code ? "active" : "")).join("")
-    : `<p class="subtle">선택 종목과 같은 업종의 비교 후보가 부족합니다.</p>`;
-  riskList.innerHTML = riskCandidates.length
-    ? riskCandidates.map((item, index) => recommendationButton(item, index + 1, "risk")).join("")
-    : `<p class="subtle">현재 기준에서 뚜렷한 주의 후보가 많지 않습니다.</p>`;
+  if (sectorList) sectorList.innerHTML = "";
+  if (riskList) riskList.innerHTML = "";
 }
 
 function renderSummary(stock, analysis) {
@@ -881,11 +980,9 @@ function renderSummary(stock, analysis) {
   const signalCard = $("signal-card");
   signalCard.className = `signal-card ${analysis.tone} decision-panel`;
   $("final-signal").textContent = analysis.signal;
-  $("total-score").textContent = `${analysis.total.toFixed(1)}점`;
-  $("scorebar-fill").style.width = `${analysis.total}%`;
-  $("scorebar-fill").style.background = signalColor(analysis.tone);
+  animateScoreDisplay(stock, analysis);
   $("confidence").textContent = `${analysis.confidence.label} (${analysis.confidence.score.toFixed(0)}점)${analysis.confidence.warning ? ` · ${analysis.confidence.warning}` : ""}`;
-  $("top-reasons").innerHTML = analysis.reasons.map((reason) => `<li>${reason}</li>`).join("");
+  $("top-reasons").innerHTML = analysis.reasons.slice(1).map((reason) => `<li>${reason}</li>`).join("");
 
   const watchButton = $("watch-button");
   const watched = state.watchlist.includes(stock.code);
@@ -896,31 +993,123 @@ function renderSummary(stock, analysis) {
 function renderAnalysis(stock, analysis) {
   $("technical-score").textContent = `${analysis.weighted.technical.toFixed(1)} / ${analysis.profile.weights.technical}점`;
   $("fundamental-score").textContent = `${analysis.weighted.fundamental.toFixed(1)} / ${analysis.profile.weights.fundamental}점`;
-  $("flow-score").textContent = `${analysis.weighted.flow.toFixed(1)} / ${analysis.profile.weights.flow}점`;
+  if ($("flow-score")) $("flow-score").textContent = `${analysis.weighted.flow.toFixed(1)} / ${analysis.profile.weights.flow}점`;
   $("news-score").textContent = `${analysis.weighted.news.toFixed(1)} / ${analysis.profile.weights.news}점`;
   $("market-score").textContent = `${analysis.weighted.market.toFixed(1)} / ${analysis.profile.weights.market}점`;
 
   $("technical-grid").innerHTML = analysis.sections.technical.items.map(indicatorCard).join("");
   $("fundamental-grid").innerHTML = analysis.sections.fundamental.items.map(indicatorCard).join("");
-  $("flow-grid").innerHTML = analysis.sections.flow.items
-    .map((item) => `<div class="flow-card"><strong>${item.name}</strong><dl class="metric-list compact"><div><dt>1일</dt><dd>${item.d1 === null ? "API 연결 필요" : engine.formatSigned(item.d1)}</dd></div><div><dt>5일</dt><dd>${item.d5 === null ? "API 연결 필요" : engine.formatSigned(item.d5)}</dd></div><div><dt>20일</dt><dd>${item.d20 === null ? "API 연결 필요" : engine.formatSigned(item.d20)}</dd></div></dl></div>`)
-    .join("");
-  $("news-list").innerHTML = analysis.sections.news.unavailable ? `<div class="news-card"><strong>뉴스/공시 분석 연결 필요</strong><p class="subtle">현재 화면은 가격과 주요 재무 지표를 우선 반영합니다. 뉴스 감성, 공시 리스크는 별도 API 연결 후 판단에 포함됩니다.</p><span class="tag hold">확장 예정</span></div>` : [
+  if ($("flow-grid")) {
+    $("flow-grid").innerHTML = analysis.sections.flow.items
+      .map((item) => `<div class="flow-card"><strong>${item.name}</strong><dl class="metric-list compact"><div><dt>1일</dt><dd>${item.d1 === null ? "API 연결 필요" : engine.formatSigned(item.d1)}</dd></div><div><dt>5일</dt><dd>${item.d5 === null ? "API 연결 필요" : engine.formatSigned(item.d5)}</dd></div><div><dt>20일</dt><dd>${item.d20 === null ? "API 연결 필요" : engine.formatSigned(item.d20)}</dd></div></dl></div>`)
+      .join("");
+  }
+  $("news-list").innerHTML = analysis.sections.news.unavailable ? liveNewsLoadingCard(stock) : [
     ...analysis.sections.news.items.map((item) => `<div class="news-card"><strong>${item.title}</strong><p class="subtle">${item.summary}</p><span class="tag ${item.sentiment === "긍정" ? "buy" : item.sentiment === "부정" ? "sell" : "hold"}">${item.sentiment} · ${item.impact}</span></div>`),
     ...analysis.sections.news.disclosures.map((item) => `<div class="news-card"><strong>공시: ${item.title}</strong><p class="subtle">주가 영향은 ${item.impact} 요인으로 분류됩니다.</p><span class="tag hold">공시</span></div>`)
   ].join("");
   $("market-grid").innerHTML = analysis.sections.market.items.map((item) => `<div class="indicator-card"><strong>${item.name}</strong><div>${item.value}</div><p class="subtle">${item.detail}</p></div>`).join("");
-  $("risk-list").innerHTML = analysis.risks.map((risk) => `<li>${risk}</li>`).join("");
-  $("backtest-grid").innerHTML = [
-    ["테스트 기간", stock.backtest.period],
-    ["매수 조건", stock.backtest.buyRule],
-    ["매도 조건", stock.backtest.sellRule],
-    ["누적 수익률", formatNullable(stock.backtest.returnRate, "%")],
-    ["최대 낙폭", formatNullable(stock.backtest.mdd, "%")],
-    ["승률", formatNullable(stock.backtest.winRate, "%")],
-    ["평균 보유 기간", formatNullable(stock.backtest.holdingDays, "일")],
-    [`${stock.market} 대비 초과 수익률`, formatNullable(stock.backtest.excessReturn, "%")]
-  ].map(([label, value]) => `<div class="metric-card"><strong>${label}</strong><span>${value}</span></div>`).join("");
+  if ($("risk-list")) $("risk-list").innerHTML = analysis.risks.map((risk) => `<li>${risk}</li>`).join("");
+  if ($("backtest-grid")) {
+    $("backtest-grid").innerHTML = [
+      ["테스트 기간", stock.backtest.period],
+      ["매수 조건", stock.backtest.buyRule],
+      ["매도 조건", stock.backtest.sellRule],
+      ["누적 수익률", formatNullable(stock.backtest.returnRate, "%")],
+      ["최대 낙폭", formatNullable(stock.backtest.mdd, "%")],
+      ["승률", formatNullable(stock.backtest.winRate, "%")],
+      ["평균 보유 기간", formatNullable(stock.backtest.holdingDays, "일")],
+      [`${stock.market} 대비 초과 수익률`, formatNullable(stock.backtest.excessReturn, "%")]
+    ].map(([label, value]) => `<div class="metric-card"><strong>${label}</strong><span>${value}</span></div>`).join("");
+  }
+}
+
+function liveNewsLoadingCard(stock) {
+  return `<div class="news-card live-news-status">
+    <strong>실시간 주요 뉴스 조사 중</strong>
+    <p class="subtle">${stock.name}, 업종, 연준/FOMC, 트럼프 발언, 환율·금리 등 시장 변수를 함께 조회합니다.</p>
+    <span class="tag hold">실시간 조회</span>
+  </div>`;
+}
+
+function liveNewsUnavailable(message = "뉴스 조회가 지연되고 있습니다.") {
+  return `<div class="news-card live-news-status">
+    <strong>실시간 뉴스 확인 필요</strong>
+    <p class="subtle">${message} 가격·차트 신호와 별도로 주요 뉴스는 투자 전 다시 확인해 주세요.</p>
+    <span class="tag hold">확인 필요</span>
+  </div>`;
+}
+
+function liveNewsTag(item) {
+  const tone = item.sentiment === "긍정" ? "buy" : item.sentiment === "부정" ? "sell" : "hold";
+  return `<span class="tag ${tone}">${item.sentiment} · ${item.impact}</span>`;
+}
+
+function formatNewsTime(value) {
+  if (!value) return "시간 미확인";
+  return new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function getNewsClickUrl(item) {
+  const fallbackQuery = item.title || item.summary || state.searchQuery || "코스피 코스닥";
+  const naverNewsUrl = `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(fallbackQuery)}`;
+  if (!item.link) return item.clickUrl || naverNewsUrl;
+
+  try {
+    const hostname = new URL(item.link).hostname;
+    if (hostname.includes("news.google.com")) return item.clickUrl || naverNewsUrl;
+  } catch (error) {
+    return item.clickUrl || naverNewsUrl;
+  }
+
+  return item.clickUrl || item.link;
+}
+
+function renderLiveNews(stock, payload) {
+  if (state.selectedCode !== stock.code) return;
+  $("news-score").textContent = `실시간 뉴스 ${payload.summary.itemCount}건 · ${payload.summary.sentiment}`;
+  $("news-list").innerHTML = `
+    <div class="news-card live-news-summary">
+      <strong>${stock.name} 관련 실시간 뉴스 요약</strong>
+      <p class="subtle">검색 시점 기준 ${payload.summary.itemCount}건을 확인했습니다. 거시 리스크는 ${payload.summary.riskLevel}, 뉴스 감성은 ${payload.summary.sentiment}입니다.</p>
+      <span class="tag ${payload.summary.sentiment === "긍정 우위" ? "buy" : payload.summary.sentiment === "부정 우위" ? "sell" : "hold"}">업데이트 ${formatNewsTime(payload.generatedAt)}</span>
+    </div>
+    ${payload.items.slice(0, 8).map((item) => `<a class="news-card live-news-item" href="${getNewsClickUrl(item)}" target="_blank" rel="noreferrer">
+      <strong>${item.title}</strong>
+      <p class="subtle">${item.summary}</p>
+      <div class="news-meta-row"><span>${item.category} · ${item.source} · ${formatNewsTime(item.publishedAt)}</span>${liveNewsTag(item)}</div>
+    </a>`).join("")}`;
+}
+
+function fetchLiveNews(stock) {
+  const cacheKey = `${stock.code}:${stock.name}:${stock.sector}`;
+  if (liveNewsCache.has(cacheKey)) {
+    renderLiveNews(stock, liveNewsCache.get(cacheKey));
+    return;
+  }
+  if (liveNewsRequests.has(cacheKey)) return;
+
+  const params = new URLSearchParams({
+    stock: stock.name,
+    code: stock.code,
+    sector: stock.sector || "",
+    query: `${stock.name} ${stock.code}`
+  });
+  const request = fetch(`/api/news?${params.toString()}`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`뉴스 조회 실패 ${response.status}`);
+      return response.json();
+    })
+    .then((payload) => {
+      liveNewsCache.set(cacheKey, payload);
+      renderLiveNews(stock, payload);
+    })
+    .catch((error) => {
+      if (state.selectedCode === stock.code) $("news-list").innerHTML = liveNewsUnavailable(error.message);
+    })
+    .finally(() => liveNewsRequests.delete(cacheKey));
+
+  liveNewsRequests.set(cacheKey, request);
 }
 
 function renderForecast(analysis) {
@@ -942,7 +1131,7 @@ function renderMode() {
   document.querySelectorAll(".mode-option").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === state.mode);
   });
-  $("mode-description").textContent = engine.modeProfiles[state.mode].description;
+  if ($("mode-description")) $("mode-description").textContent = engine.modeProfiles[state.mode].description;
 }
 
 function renderWatchlist() {
@@ -1226,26 +1415,12 @@ function layoutAnalysisMasonry() {
   const container = document.querySelector(".analysis-masonry");
   if (!container) return;
   const panels = Array.from(container.querySelectorAll(".analysis-panel"));
-  const gap = 16;
-  const width = container.clientWidth;
-  const columns = width >= 1180 ? 3 : width >= 760 ? 2 : 1;
-  const columnWidth = (width - gap * (columns - 1)) / columns;
-  const heights = Array(columns).fill(0);
-
   panels.forEach((panel) => {
-    panel.style.width = `${columnWidth}px`;
-    panel.style.position = "absolute";
+    panel.style.removeProperty("width");
+    panel.style.removeProperty("position");
+    panel.style.removeProperty("transform");
   });
-
-  panels.forEach((panel) => {
-    const targetColumn = heights.indexOf(Math.min(...heights));
-    const x = targetColumn * (columnWidth + gap);
-    const y = heights[targetColumn];
-    panel.style.transform = `translate(${x}px, ${y}px)`;
-    heights[targetColumn] += panel.offsetHeight + gap;
-  });
-
-  container.style.height = `${Math.max(...heights, 0) - gap}px`;
+  container.style.removeProperty("height");
 }
 
 function renderUnavailable(entry) {
@@ -1266,36 +1441,40 @@ function renderUnavailable(entry) {
   const signalCard = $("signal-card");
   signalCard.className = "signal-card hold decision-panel is-unavailable";
   $("final-signal").textContent = "분석 준비 중";
+  window.cancelAnimationFrame(scoreAnimationFrame);
+  window.clearTimeout(scoreAnimationTimeout);
+  state.scoreAnimationKey = `unavailable:${entry.code}`;
   $("total-score").textContent = "점수 산정 전";
   $("scorebar-fill").style.width = "45%";
   $("scorebar-fill").style.background = "var(--amber)";
   $("confidence").textContent = "참고용 · 가격 데이터 조회가 완료되면 정량 분석으로 자동 전환됩니다.";
   $("top-reasons").innerHTML = [
-    `${entry.name}(${entry.code}) 종목이 검색 결과에서 선택되었습니다.`,
     "상단 TradingView 차트에서 현재 주가 흐름과 거래량을 직접 확인할 수 있습니다.",
     "정량 점수는 가격·재무·수급 지표가 충분히 확보된 종목에만 표시합니다."
   ].map((reason) => `<li>${reason}</li>`).join("");
 
   $("technical-score").textContent = "차트 확인";
   $("fundamental-score").textContent = "확장 예정";
-  $("flow-score").textContent = "확장 예정";
+  if ($("flow-score")) $("flow-score").textContent = "확장 예정";
   $("news-score").textContent = "확장 예정";
   $("market-score").textContent = "시장 구분 확인";
-  const unavailableCard = (title) => `<div class="indicator-card"><strong>${title}</strong><div>TradingView에서 확인</div><p class="subtle">실시간 차트에서 가격 흐름을 먼저 확인하고, 정량 지표는 데이터 범위가 확장되면 함께 표시됩니다.</p><span class="tag hold">차트 기반 확인</span></div>`;
+  const unavailableCard = (title) => `<div class="indicator-card"><strong>${tooltipLabel(title)}</strong><div>TradingView에서 확인</div><p class="subtle">실시간 차트에서 가격 흐름을 먼저 확인하고, 정량 지표는 데이터 범위가 확장되면 함께 표시됩니다.</p><span class="tag hold">차트 기반 확인</span></div>`;
   $("technical-grid").innerHTML = ["이동평균선", "RSI", "MACD", "거래량 변화"].map(unavailableCard).join("");
-  $("fundamental-grid").innerHTML = ["PER", "PBR", "ROE", "성장률"].map((title) => `<div class="indicator-card"><strong>${title}</strong><div>확장 예정</div><p class="subtle">재무 지표는 다음 데이터 업데이트 범위에서 순차적으로 추가됩니다.</p><span class="tag hold">참고 제외</span></div>`).join("");
-  $("flow-grid").innerHTML = ["개인", "외국인", "기관"].map((name) => `<div class="flow-card"><strong>${name}</strong><p class="subtle">투자자별 순매수 흐름은 확장 기능에서 표시됩니다.</p></div>`).join("");
+  $("fundamental-grid").innerHTML = ["PER", "PBR", "ROE", "매출 성장률"].map((title) => `<div class="indicator-card"><strong>${tooltipLabel(title)}</strong><div>확장 예정</div><p class="subtle">재무 지표는 다음 데이터 업데이트 범위에서 순차적으로 추가됩니다.</p><span class="tag hold">참고 제외</span></div>`).join("");
+  if ($("flow-grid")) $("flow-grid").innerHTML = ["개인", "외국인", "기관"].map((name) => `<div class="flow-card"><strong>${name}</strong><p class="subtle">투자자별 순매수 흐름은 확장 기능에서 표시됩니다.</p></div>`).join("");
   $("news-list").innerHTML = `<div class="news-card"><strong>뉴스/공시 요약</strong><p class="subtle">뉴스와 공시 분석은 확장 단계에서 연결됩니다. 현재는 차트 중심으로 흐름을 확인해 주세요.</p><span class="tag hold">확장 예정</span></div>`;
   $("market-grid").innerHTML = [
     { name: "시장", value: entry.market || "KOSPI/KOSDAQ", detail: "시장 구분만 검색 목록에서 확인됩니다." },
     { name: "업종", value: entry.sector || entry.industry || "업종 정보 준비 중", detail: "업종 데이터는 제공되는 경우에만 표시됩니다." }
   ].map((item) => `<div class="indicator-card"><strong>${item.name}</strong><div>${item.value}</div><p class="subtle">${item.detail}</p></div>`).join("");
-  $("risk-list").innerHTML = [
-    "TradingView 차트의 변동성, 거래량 급증 여부를 함께 확인해야 합니다.",
-    "재무·수급 지표가 아직 점수에 포함되지 않아 정량 판단은 보수적으로 봐야 합니다.",
-    "뉴스와 공시 이슈는 별도 확인 후 투자 판단에 반영해야 합니다."
-  ].map((risk) => `<li>${risk}</li>`).join("");
-  $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>확장 기능에서 제공</span></div>`).join("");
+  if ($("risk-list")) {
+    $("risk-list").innerHTML = [
+      "TradingView 차트의 변동성, 거래량 급증 여부를 함께 확인해야 합니다.",
+      "재무·수급 지표가 아직 점수에 포함되지 않아 정량 판단은 보수적으로 봐야 합니다.",
+      "뉴스와 공시 이슈는 별도 확인 후 투자 판단에 반영해야 합니다."
+    ].map((risk) => `<li>${risk}</li>`).join("");
+  }
+  if ($("backtest-grid")) $("backtest-grid").innerHTML = ["테스트 기간", "누적 수익률", "최대 낙폭", "승률"].map((label) => `<div class="metric-card"><strong>${label}</strong><span>확장 기능에서 제공</span></div>`).join("");
   $("forecast-horizon").textContent = "차트 기반 확인";
   $("forecast-direction").textContent = "정량 예측 준비 중";
   $("forecast-near-term").textContent = "가격 데이터 자동 조회가 완료되면 상승/하락 추세와 매수 검토 조건을 계산합니다.";
@@ -1330,6 +1509,7 @@ function renderDetailedStock(stock) {
   renderMode();
   renderSummary(stock, analysis);
   renderAnalysis(stock, analysis);
+  fetchLiveNews(stock);
   renderForecast(analysis);
   renderRecommendations(stock);
   renderWatchlist();
@@ -1373,6 +1553,7 @@ function render() {
 function selectStock(code, options = {}) {
   const { clearSearch = true, hideResults = true } = options;
   state.selectedCode = code;
+  saveSelectedStock();
   if (clearSearch) $("stock-search").value = "";
   if (hideResults) $("search-results").style.display = "none";
   render();
@@ -1381,23 +1562,15 @@ function selectStock(code, options = {}) {
 function handleSearchInput(event) {
   const query = event.target.value;
   renderSearchResults(query);
-  const normalizedKeyword = compactText(query);
-  if (normalizedKeyword.length < 2) return;
-  const bestMatch = getSearchMatches(query)[0];
-  if (bestMatch && bestMatch.code !== state.selectedCode) {
-    selectStock(bestMatch.code, { clearSearch: false, hideResults: false });
-  }
 }
 
 $("stock-search").addEventListener("input", handleSearchInput);
-$("stock-search").addEventListener("keyup", handleSearchInput);
-$("stock-search").addEventListener("change", handleSearchInput);
 $("stock-search").addEventListener("click", (event) => renderSearchResults(event.target.value));
 $("search-results").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-code]");
   if (button) selectStock(button.dataset.code);
 });
-document.querySelector(".recommendation-panel").addEventListener("click", (event) => {
+document.querySelector(".recommendation-panel")?.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-code]");
   if (button) selectStock(button.dataset.code);
 });
@@ -1421,10 +1594,33 @@ document.addEventListener("click", (event) => {
   const searchWrap = event.target.closest(".search-wrap");
   if (!searchWrap) $("search-results").style.display = "none";
 });
+document.addEventListener("mouseover", (event) => {
+  const target = event.target.closest(".has-tooltip");
+  if (target) showTooltip(target);
+});
+document.addEventListener("focusin", (event) => {
+  const target = event.target.closest(".has-tooltip");
+  if (target) showTooltip(target);
+});
+document.addEventListener("mouseout", (event) => {
+  if (event.target.closest(".has-tooltip")) hideTooltip();
+});
+document.addEventListener("focusout", (event) => {
+  if (event.target.closest(".has-tooltip")) hideTooltip();
+});
+window.addEventListener("scroll", hideTooltip, true);
+window.addEventListener("resize", hideTooltip);
 $("stock-search").addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     $("search-results").style.display = "none";
     $("stock-search").blur();
+  }
+  if (event.key === "Enter") {
+    const bestMatch = getSearchMatches(event.currentTarget.value)[0];
+    if (bestMatch) {
+      event.preventDefault();
+      selectStock(bestMatch.code);
+    }
   }
 });
 
