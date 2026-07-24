@@ -386,6 +386,24 @@ h2 {
   font-size: 34px;
 }
 
+.price-line.is-unavailable {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  align-items: start;
+  margin: 16px 0;
+}
+
+.price-line.is-unavailable strong {
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.price-line.is-unavailable span {
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .positive {
   color: var(--red);
 }
@@ -446,6 +464,20 @@ dd {
 .signal-main span {
   font-size: 20px;
   font-weight: 700;
+}
+
+.signal-card.is-unavailable .signal-main {
+  align-items: flex-start;
+}
+
+.signal-card.is-unavailable .signal-main strong {
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.signal-card.is-unavailable .signal-main span {
+  font-size: 16px;
+  white-space: nowrap;
 }
 
 .scorebar {

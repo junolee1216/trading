@@ -781,6 +781,7 @@ function signalFromScore(score, max) {
 }
 
 function renderSummary(stock, analysis) {
+  setPriceFallbackMode(false);
   $("stock-market").textContent = `${stock.market} · ${stock.sector}`;
   $("stock-name").textContent = stock.name;
   $("stock-code").textContent = stock.code;
@@ -794,7 +795,7 @@ function renderSummary(stock, analysis) {
   $("footer-update").textContent = `데이터 업데이트: ${stock.updatedAt}`;
 
   const signalCard = $("signal-card");
-  signalCard.className = `signal-card ${analysis.tone}`;
+  signalCard.className = `signal-card ${analysis.tone} decision-panel`;
   $("final-signal").textContent = analysis.signal;
   $("total-score").textContent = `${analysis.total.toFixed(1)}점`;
   $("scorebar-fill").style.width = `${analysis.total}%`;
@@ -869,6 +870,44 @@ function renderWatchlist() {
   }).join("");
 }
 
+function setPriceFallbackMode(enabled) {
+  document.querySelector(".price-line")?.classList.toggle("is-unavailable", enabled);
+}
+
+function clampCanvasValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function drawChartBadge(ctx, text, x, y, color, width, height, align = "left") {
+  const paddingX = 7;
+  const badgeHeight = 21;
+  const badgeWidth = Math.ceil(ctx.measureText(text).width) + paddingX * 2;
+  const left = clampCanvasValue(align === "right" ? x - badgeWidth : x, 4, width - badgeWidth - 4);
+  const top = clampCanvasValue(y - badgeHeight + 6, 4, height - badgeHeight - 4);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+  ctx.strokeStyle = "rgba(217, 225, 232, 0.95)";
+  ctx.lineWidth = 1;
+  ctx.fillRect(left, top, badgeWidth, badgeHeight);
+  ctx.strokeRect(left, top, badgeWidth, badgeHeight);
+  ctx.fillStyle = color;
+  ctx.fillText(text, left + paddingX, top + 15);
+  ctx.restore();
+  return top + 15;
+}
+
+function placeChartLabel(targetY, occupied, minY, maxY, direction = 1) {
+  let nextY = clampCanvasValue(targetY, minY, maxY);
+  let attempts = 0;
+  while (occupied.some((usedY) => Math.abs(usedY - nextY) < 24) && attempts < 8) {
+    nextY = clampCanvasValue(nextY + direction * 24, minY, maxY);
+    attempts += 1;
+  }
+  occupied.push(nextY);
+  return nextY;
+}
+
 function drawChart(stock, analysis, canvasId = "price-chart") {
   const canvas = $(canvasId);
   if (!canvas) return;
@@ -900,6 +939,7 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
   const step = (width - pad.left - pad.right) / prices.length;
   const x = (index) => pad.left + index * step + step * 0.5;
   const y = (price) => pad.top + (maxPrice - price) / (maxPrice - minPrice) * chartHeight;
+  const occupiedLabelYs = [];
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#ffffff";
@@ -979,28 +1019,33 @@ function drawChart(stock, analysis, canvasId = "price-chart") {
     const support = Math.min(...prices.slice(-12));
     const resistance = Math.max(...prices.slice(-12));
     [
-      ["지지선", support, "#1f6fb2"],
-      ["저항선", resistance, "#a86b00"]
-    ].forEach(([label, price, color]) => {
+      ["저항선", resistance, "#a86b00", -1],
+      ["지지선", support, "#1f6fb2", 1]
+    ].forEach(([label, price, color, direction]) => {
+      const lineY = y(price);
       ctx.strokeStyle = color;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
-      ctx.moveTo(pad.left, y(price));
-      ctx.lineTo(width - pad.right, y(price));
+      ctx.moveTo(pad.left, lineY);
+      ctx.lineTo(width - pad.right, lineY);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = color;
-      ctx.fillText(label, width - pad.right - 42, y(price) - 6);
+      ctx.font = "700 12px Segoe UI";
+      const labelY = placeChartLabel(lineY + direction * 18, occupiedLabelYs, pad.top + 15, volumeTop - 8, direction);
+      drawChartBadge(ctx, label, width - pad.right - 8, labelY, color, width, height, "right");
     });
   }
 
   if (isFullyZoomedOut() && state.showSignals && prices.length >= 5) {
     const signalIndex = prices.length - 5;
+    const signalY = y(prices[signalIndex]);
     ctx.fillStyle = analysis.tone === "buy" ? "#12805c" : analysis.tone === "sell" ? "#1f6fb2" : "#a86b00";
     ctx.beginPath();
-    ctx.arc(x(signalIndex), y(prices[signalIndex]) - 14, 6, 0, Math.PI * 2);
+    ctx.arc(x(signalIndex), signalY - 14, 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillText(analysis.signal, x(signalIndex) + 10, y(prices[signalIndex]) - 10);
+    ctx.font = "700 12px Segoe UI";
+    const labelY = placeChartLabel(signalY - 20, occupiedLabelYs, pad.top + 15, volumeTop - 8, -1);
+    drawChartBadge(ctx, analysis.signal, x(signalIndex) + 12, labelY, ctx.fillStyle, width, height);
   }
 
   if (canvasId === "tradingview-local-chart") renderChartInfo(stock, analysis, prices);
@@ -1106,11 +1151,12 @@ function layoutAnalysisMasonry() {
 
 function renderUnavailable(entry) {
   renderMode();
+  setPriceFallbackMode(true);
   $("stock-market").textContent = `${entry.market || "KOSPI/KOSDAQ"}${entry.sector ? ` · ${entry.sector}` : ""}`;
   $("stock-name").textContent = entry.name;
   $("stock-code").textContent = entry.code;
-  $("latest-price").textContent = "TradingView 차트 확인";
-  $("change-rate").textContent = "실시간 차트 제공";
+  $("latest-price").textContent = "가격 데이터 조회 중";
+  $("change-rate").textContent = "차트는 아래에서 확인";
   $("change-rate").className = "neutral";
   $("volume").textContent = "차트 내 거래량 확인";
   $("market-cap").textContent = "추가 지표 준비 중";
@@ -1119,12 +1165,12 @@ function renderUnavailable(entry) {
   $("footer-update").textContent = `종목 목록 업데이트: ${data.updatedAt}`;
 
   const signalCard = $("signal-card");
-  signalCard.className = "signal-card hold decision-panel";
-  $("final-signal").textContent = "차트 확인";
-  $("total-score").textContent = "정량 점수 제외";
+  signalCard.className = "signal-card hold decision-panel is-unavailable";
+  $("final-signal").textContent = "분석 준비 중";
+  $("total-score").textContent = "점수 산정 전";
   $("scorebar-fill").style.width = "45%";
   $("scorebar-fill").style.background = "var(--amber)";
-  $("confidence").textContent = "참고용 · 현재 화면은 TradingView 실시간 차트를 우선 제공합니다.";
+  $("confidence").textContent = "참고용 · 가격 데이터 조회가 완료되면 정량 분석으로 자동 전환됩니다.";
   $("top-reasons").innerHTML = [
     `${entry.name}(${entry.code}) 종목이 검색 결과에서 선택되었습니다.`,
     "상단 TradingView 차트에서 현재 주가 흐름과 거래량을 직접 확인할 수 있습니다.",
