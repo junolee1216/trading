@@ -609,7 +609,7 @@ function buildDynamicStock(entry, chartResult) {
   if (closes.length < 20) throw new Error("Not enough chart data");
 
   const price = Math.round(Number.isFinite(meta.regularMarketPrice) ? meta.regularMarketPrice : closes[closes.length - 1]);
-  const previousClose = Number.isFinite(meta.chartPreviousClose) ? meta.chartPreviousClose : closes[closes.length - 2] || price;
+  const previousClose = closes[closes.length - 2] || price;
   const changeRate = previousClose ? Number(((price - previousClose) / previousClose * 100).toFixed(2)) : 0;
   const highs = highValues.filter((value) => Number.isFinite(value));
   const lows = lowValues.filter((value) => Number.isFinite(value));
