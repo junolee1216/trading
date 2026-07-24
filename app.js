@@ -55,6 +55,7 @@ const dynamicStockRequests = new Map();
 const recommendationCache = new Map();
 const liveNewsCache = new Map();
 const liveNewsRequests = new Map();
+const liveNewsFallbackOrigin = "https://korea-stock-trading-dashboard.redlips1014.chatgpt.site";
 let tradingViewRenderId = 0;
 let activeDraftAnnotation = null;
 let activePan = null;
@@ -1081,6 +1082,23 @@ function renderLiveNews(stock, payload) {
     </a>`).join("")}`;
 }
 
+async function fetchNewsJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`뉴스 조회 실패 ${response.status}`);
+
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  if (!contentType.includes("application/json")) {
+    throw new Error("뉴스 API가 JSON이 아닌 응답을 반환했습니다.");
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error("뉴스 응답을 읽을 수 없습니다.");
+  }
+}
+
 function fetchLiveNews(stock) {
   const cacheKey = `${stock.code}:${stock.name}:${stock.sector}`;
   if (liveNewsCache.has(cacheKey)) {
@@ -1095,10 +1113,13 @@ function fetchLiveNews(stock) {
     sector: stock.sector || "",
     query: `${stock.name} ${stock.code}`
   });
-  const request = fetch(`/api/news?${params.toString()}`)
-    .then((response) => {
-      if (!response.ok) throw new Error(`뉴스 조회 실패 ${response.status}`);
-      return response.json();
+  const localNewsUrl = `/api/news?${params.toString()}`;
+  const fallbackNewsUrl = `${liveNewsFallbackOrigin}/api/news?${params.toString()}`;
+  const request = fetchNewsJson(localNewsUrl)
+    .catch((error) => {
+      const isFallbackOrigin = window.location.origin === liveNewsFallbackOrigin;
+      if (isFallbackOrigin) throw error;
+      return fetchNewsJson(fallbackNewsUrl);
     })
     .then((payload) => {
       liveNewsCache.set(cacheKey, payload);

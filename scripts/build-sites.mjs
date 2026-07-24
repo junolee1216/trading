@@ -37,7 +37,10 @@ function response(body, type, status = 200) {
     status,
     headers: {
       "Content-Type": type,
-      "Cache-Control": "public, max-age=60"
+      "Cache-Control": "public, max-age=60",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
     }
   });
 }
