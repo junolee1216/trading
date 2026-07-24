@@ -30,7 +30,7 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const formatWon = (value) => `${value.toLocaleString()}원`;
-const formatNullable = (value, suffix = "") => (value === null || value === undefined ? "연결 필요" : `${value}${suffix}`);
+const formatNullable = (value, suffix = "") => (value === null || value === undefined ? "자료 없음" : `${value}${suffix}`);
 const percentClass = (value) => (value > 0 ? "positive" : value < 0 ? "negative" : "neutral");
 const signalColor = (tone) => ({
   "strong-buy": "var(--green)",
@@ -661,7 +661,7 @@ function buildDynamicStock(entry, chartResult) {
     changeRate,
     volume: lastVolume,
     avgVolume20,
-    marketCap: "동적 조회",
+    marketCap: entry.marketCap || "차트 기준 확인",
     weekHigh,
     weekLow,
     updatedAt: `${updatedTime.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} Yahoo Finance 기준`,
@@ -1002,7 +1002,7 @@ function renderAnalysis(stock, analysis) {
   $("fundamental-grid").innerHTML = analysis.sections.fundamental.items.map(indicatorCard).join("");
   if ($("flow-grid")) {
     $("flow-grid").innerHTML = analysis.sections.flow.items
-      .map((item) => `<div class="flow-card"><strong>${item.name}</strong><dl class="metric-list compact"><div><dt>1일</dt><dd>${item.d1 === null ? "API 연결 필요" : engine.formatSigned(item.d1)}</dd></div><div><dt>5일</dt><dd>${item.d5 === null ? "API 연결 필요" : engine.formatSigned(item.d5)}</dd></div><div><dt>20일</dt><dd>${item.d20 === null ? "API 연결 필요" : engine.formatSigned(item.d20)}</dd></div></dl></div>`)
+      .map((item) => `<div class="flow-card"><strong>${item.name}</strong><dl class="metric-list compact"><div><dt>1일</dt><dd>${item.d1 === null ? "자료 없음" : engine.formatSigned(item.d1)}</dd></div><div><dt>5일</dt><dd>${item.d5 === null ? "자료 없음" : engine.formatSigned(item.d5)}</dd></div><div><dt>20일</dt><dd>${item.d20 === null ? "자료 없음" : engine.formatSigned(item.d20)}</dd></div></dl></div>`)
       .join("");
   }
   $("news-list").innerHTML = analysis.sections.news.unavailable ? liveNewsLoadingCard(stock) : [
@@ -1427,7 +1427,7 @@ function renderUnavailableChartInfo(entry) {
     <dl>
       <div><dt>시장</dt><dd>${entry.market || "확인 필요"}</dd></div>
       <div><dt>업종</dt><dd>${entry.sector || entry.industry || "확장 예정"}</dd></div>
-      <div><dt>점수</dt><dd>데이터 연결 후 제공</dd></div>
+      <div><dt>점수</dt><dd>차트 기준 참고</dd></div>
       <div><dt>신호</dt><dd>차트 중심 확인</dd></div>
     </dl>`;
 }
@@ -1454,7 +1454,7 @@ function renderUnavailable(entry) {
   $("change-rate").textContent = "차트는 아래에서 확인";
   $("change-rate").className = "neutral";
   $("volume").textContent = "차트 내 거래량 확인";
-  $("market-cap").textContent = "추가 지표 준비 중";
+  $("market-cap").textContent = entry.marketCap || "차트 기준 확인";
   $("week-range").textContent = "차트 기간에서 확인";
   $("updated-at").textContent = data.updatedAt;
   $("footer-update").textContent = `종목 목록 업데이트: ${data.updatedAt}`;

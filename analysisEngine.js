@@ -26,6 +26,9 @@ window.AnalysisEngine = (() => {
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const last = (values) => values[values.length - 1];
   const formatSigned = (value) => `${value > 0 ? "+" : ""}${value.toLocaleString()}억`;
+  const hasNumber = (value) => Number.isFinite(Number(value));
+  const formatNumber = (value, suffix = "") => (hasNumber(value) ? `${Number(value).toLocaleString()}${suffix}` : "자료 없음");
+  const formatPercent = (value) => (hasNumber(value) ? `${Number(value).toFixed(2)}%` : "자료 없음");
 
   function movingAverage(values, period) {
     if (values.length < period) return mean(values);
@@ -142,11 +145,11 @@ window.AnalysisEngine = (() => {
       missing: Object.values(f).filter((value) => value === null || value === undefined).length,
       items: checks.map(([name, value, average, score, detail]) => ({
         name,
-        value: value === null || value === undefined ? "연결 필요" : `${value}${name.includes("비율") || name.includes("률") || name === "ROE" ? "%" : "배"}`,
+        value: value === null || value === undefined ? "자료 없음" : `${value}${name.includes("비율") || name.includes("률") || name === "ROE" ? "%" : "배"}`,
         detail,
         score,
         max: name === "배당수익률" ? 5 : 9,
-        tag: value === null || value === undefined ? { label: "연결 필요", tone: "hold" } : signalTag(score / (name === "배당수익률" || name === "외국인비율" ? 5 : 9))
+        tag: value === null || value === undefined ? { label: "중립 반영", tone: "hold" } : signalTag(score / (name === "배당수익률" || name === "외국인비율" ? 5 : 9))
       }))
     };
   }
@@ -207,17 +210,17 @@ window.AnalysisEngine = (() => {
     raw += market.kospi.trend === "weak" ? -5 : 5;
     raw += market.kosdaq.trend === "weak" ? -4 : 3;
     raw += market.usdkrw.signal === "부담" ? -4 : 2;
-    raw += market.baseRate.signal === "중립" ? 2 : -2;
+    raw += market.baseRate.signal === "부담" ? -2 : 2;
     const sectorBoost = stock.sector === "반도체" ? 8 : stock.sector === "인터넷" ? -4 : 0;
     raw += sectorBoost;
     return {
       raw: clamp(raw, 0, 50),
       max: 50,
       items: [
-        { name: "KOSPI", value: `${market.kospi.level.toLocaleString()} (${market.kospi.changeRate}%)`, detail: market.kospi.trend === "weak" ? "지수 흐름이 약해 보수적으로 반영합니다." : "지수 흐름이 안정적입니다." },
-        { name: "KOSDAQ", value: `${market.kosdaq.level.toLocaleString()} (${market.kosdaq.changeRate}%)`, detail: "중소형주 투자심리를 함께 확인합니다." },
-        { name: "환율", value: `${market.usdkrw.value.toLocaleString()}원`, detail: `환율은 ${market.usdkrw.signal} 요인입니다.` },
-        { name: "기준금리", value: `${market.baseRate.value}%`, detail: `금리 환경은 ${market.baseRate.signal}으로 반영합니다.` },
+        { name: "KOSPI", value: `${formatNumber(market.kospi.level)} (${formatPercent(market.kospi.changeRate)})`, detail: market.kospi.trend === "weak" ? "지수 흐름이 약해 보수적으로 반영합니다." : "지수 흐름이 안정적입니다." },
+        { name: "KOSDAQ", value: `${formatNumber(market.kosdaq.level)} (${formatPercent(market.kosdaq.changeRate)})`, detail: "중소형주 투자심리를 함께 확인합니다." },
+        { name: "환율", value: `${formatNumber(market.usdkrw.value, "원")}`, detail: `환율은 ${market.usdkrw.signal || "중립"} 요인입니다.` },
+        { name: "기준금리", value: formatPercent(market.baseRate.value), detail: `한국은행 기준금리 기준입니다. 금리 환경은 ${market.baseRate.signal || "중립"}으로 반영합니다.` },
         { name: "업종 흐름", value: stock.sector, detail: sectorBoost > 0 ? "업종 모멘텀이 개별 종목 판단을 보강합니다." : sectorBoost < 0 ? "업종 투자심리가 약해 보수적으로 반영합니다." : "업종 흐름은 중립입니다." },
         { name: "투자심리", value: market.kospi.turnover, detail: market.sentiment }
       ]

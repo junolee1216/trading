@@ -240,7 +240,7 @@ def market_data():
             "change": round(usdkrw - usdkrw_prev, 2),
             "signal": "확인 필요",
         },
-        "baseRate": {"value": None, "signal": "금리 데이터 미연결"},
+        "baseRate": {"value": 2.75, "signal": "부담"},
         "sentiment": "개별 종목 가격은 네이버 증권 종목 페이지 기준이며, 시장 지수와 환율은 FinanceDataReader 조회 기준입니다.",
     }
 
